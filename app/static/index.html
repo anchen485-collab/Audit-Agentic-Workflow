@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>审批工作台</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <main class="shell">
+        <section class="topbar" aria-label="审批工作台">
+            <div>
+                <p class="eyebrow">Audit Agent</p>
+                <h1>审批工作台</h1>
+            </div>
+            <div class="top-actions">
+                <label class="token-field">
+                    <span>访问令牌</span>
+                    <input id="authToken" type="password" autocomplete="off">
+                </label>
+                <a class="ghost-link" href="/docs" target="_blank" rel="noreferrer">API 文档</a>
+            </div>
+        </section>
+
+        <section class="upload-panel">
+            <form id="uploadForm" class="upload-form">
+                <label class="file-picker" for="excelFile">
+                    <span class="file-title">选择员工录入 Excel</span>
+                    <span id="fileName" class="file-name">仅支持 .xlsx</span>
+                    <input id="excelFile" name="file" type="file" accept=".xlsx" required>
+                </label>
+                <button id="submitButton" type="submit">开始审批</button>
+            </form>
+            <div id="statusMessage" class="status-message" role="status">等待上传</div>
+        </section>
+
+        <section id="metrics" class="metrics" aria-label="审批指标"></section>
+
+        <section class="table-section">
+            <div class="section-head">
+                <h2>审批明细</h2>
+                <div class="table-actions">
+                    <select id="actionFilter" aria-label="审批动作筛选">
+                        <option value="">全部动作</option>
+                        <option value="approved">自动通过</option>
+                        <option value="rejected">自动驳回</option>
+                        <option value="needs_more_evidence">证据不足</option>
+                        <option value="needs_human_review">人工复核</option>
+                    </select>
+                    <button id="downloadButton" class="download-link is-hidden" type="button">下载 Excel</button>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table class="result-table">
+                    <colgroup>
+                        <col class="col-person">
+                        <col class="col-company">
+                        <col class="col-website">
+                        <col class="col-level1">
+                        <col class="col-subcategory">
+                        <col class="col-granularity">
+                        <col class="col-candidates">
+                        <col class="col-action">
+                        <col class="col-confidence">
+                        <col class="col-risk">
+                        <col class="col-review">
+                        <col class="col-reason">
+                        <col class="col-suggestion">
+                    </colgroup>
+                    <thead>
+                    <tr>
+                        <th>录入人员</th>
+                        <th>公司名</th>
+                        <th>公司官网</th>
+                        <th>一级分类</th>
+                        <th>细分</th>
+                        <th>召回粒度</th>
+                        <th>候选分类</th>
+                        <th>审批动作</th>
+                        <th>置信度</th>
+                        <th>风险分</th>
+                        <th>人工复核</th>
+                        <th>审批原因</th>
+                        <th>处理建议</th>
+                    </tr>
+                    </thead>
+                    <tbody id="resultRows">
+                    <tr>
+                        <td colspan="13" class="empty-cell">暂无审批结果</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="table-section">
+            <div class="section-head">
+                <h2>人工复核任务</h2>
+                <span id="reviewCount" class="subtle-count">0 条</span>
+            </div>
+            <div class="table-wrap compact">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>任务ID</th>
+                        <th>审批单ID</th>
+                        <th>优先级</th>
+                        <th>原因</th>
+                        <th>状态</th>
+                    </tr>
+                    </thead>
+                    <tbody id="reviewRows">
+                    <tr>
+                        <td colspan="5" class="empty-cell">暂无人工复核任务</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script src="/static/app.js?v=20260731-subcategory-granularity"></script>
+</body>
+</html>

@@ -1,0 +1,995 @@
+[
+  {
+    "case_id": "golden_001",
+    "scenario": "正确录入：软件公司业务证据支持软件开发分类",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "张三",
+      "entered_level1": "信软技术服务",
+      "entered_subcategory": "软件开发",
+      "entered_stage": "录入",
+      "company_raw": "杭州云启软件有限公司 https://yunqi.example.com",
+      "company_name": "杭州云启软件有限公司",
+      "website_url": "https://yunqi.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "公司主要提供企业管理系统、数据平台、软件开发、系统集成和运维服务。",
+      "quality_score": 92,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "提供企业管理系统、数据平台和软件开发服务",
+        "为客户提供系统集成和运维支持"
+      ],
+      "errors": []
+    },
+    "expected_action": "approved",
+    "expected_reason": "外部证据明确支持软件开发分类，证据质量高，风险低。",
+    "metric_tags": [
+      "accuracy",
+      "auto_approval_rate"
+    ],
+    "source_case_id": "case_001"
+  },
+  {
+    "case_id": "golden_002",
+    "scenario": "正确录入：医疗设备企业业务证据支持医疗设备分类",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "李四",
+      "entered_level1": "机械设备厂",
+      "entered_subcategory": "医疗设备",
+      "entered_stage": "录入",
+      "company_raw": "苏州康达医疗设备有限公司 https://kangda.example.com",
+      "company_name": "苏州康达医疗设备有限公司",
+      "website_url": "https://kangda.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "公司专注医用检测设备、康复设备、医疗器械配套系统的研发、生产和销售。",
+      "quality_score": 88,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "专注医用检测设备和康复设备",
+        "提供医疗器械配套系统研发生产"
+      ],
+      "errors": []
+    },
+    "expected_action": "approved",
+    "expected_reason": "企业主营业务与医疗设备分类一致，可以自动通过。",
+    "metric_tags": [
+      "accuracy",
+      "auto_approval_rate"
+    ],
+    "source_case_id": "case_002"
+  },
+  {
+    "case_id": "golden_003",
+    "scenario": "正确录入：农业种植企业业务证据支持种植业分类",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "王五",
+      "entered_level1": "种植业",
+      "entered_subcategory": "谷类",
+      "entered_stage": "录入",
+      "company_raw": "黑龙江丰禾农业发展有限公司 https://fenghe.example.com",
+      "company_name": "黑龙江丰禾农业发展有限公司",
+      "website_url": "https://fenghe.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "公司拥有粮食作物种植基地，主营玉米、水稻等农作物种植、农产品初加工和销售。",
+      "quality_score": 86,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "拥有粮食作物种植基地",
+        "主营农作物种植和农产品销售"
+      ],
+      "errors": []
+    },
+    "expected_action": "approved",
+    "expected_reason": "外部证据直接说明企业从事农作物种植，支持员工录入分类。",
+    "metric_tags": [
+      "accuracy",
+      "auto_approval_rate"
+    ],
+    "source_case_id": "case_003"
+  },
+  {
+    "case_id": "golden_004",
+    "scenario": "正确录入：软件公司业务证据支持软件开发分类",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "张三",
+      "entered_level1": "信软技术服务",
+      "entered_subcategory": "软件开发",
+      "entered_stage": "录入",
+      "company_raw": "杭州云启软件有限公司 https://yunqi.example.com",
+      "company_name": "杭州云启软件有限公司",
+      "website_url": "https://yunqi.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "公司主要提供企业管理系统、数据平台、软件开发、系统集成和运维服务。",
+      "quality_score": 92,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "提供企业管理系统、数据平台和软件开发服务",
+        "为客户提供系统集成和运维支持"
+      ],
+      "errors": []
+    },
+    "expected_action": "approved",
+    "expected_reason": "外部证据明确支持软件开发分类，证据质量高，风险低。",
+    "metric_tags": [
+      "accuracy",
+      "auto_approval_rate"
+    ],
+    "source_case_id": "case_001"
+  },
+  {
+    "case_id": "golden_005",
+    "scenario": "正确录入：医疗设备企业业务证据支持医疗设备分类",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "李四",
+      "entered_level1": "机械设备厂",
+      "entered_subcategory": "医疗设备",
+      "entered_stage": "录入",
+      "company_raw": "苏州康达医疗设备有限公司 https://kangda.example.com",
+      "company_name": "苏州康达医疗设备有限公司",
+      "website_url": "https://kangda.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "公司专注医用检测设备、康复设备、医疗器械配套系统的研发、生产和销售。",
+      "quality_score": 88,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "专注医用检测设备和康复设备",
+        "提供医疗器械配套系统研发生产"
+      ],
+      "errors": []
+    },
+    "expected_action": "approved",
+    "expected_reason": "企业主营业务与医疗设备分类一致，可以自动通过。",
+    "metric_tags": [
+      "accuracy",
+      "auto_approval_rate"
+    ],
+    "source_case_id": "case_002"
+  },
+  {
+    "case_id": "golden_006",
+    "scenario": "正确录入：农业种植企业业务证据支持种植业分类",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "王五",
+      "entered_level1": "种植业",
+      "entered_subcategory": "谷类",
+      "entered_stage": "录入",
+      "company_raw": "黑龙江丰禾农业发展有限公司 https://fenghe.example.com",
+      "company_name": "黑龙江丰禾农业发展有限公司",
+      "website_url": "https://fenghe.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "公司拥有粮食作物种植基地，主营玉米、水稻等农作物种植、农产品初加工和销售。",
+      "quality_score": 86,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "拥有粮食作物种植基地",
+        "主营农作物种植和农产品销售"
+      ],
+      "errors": []
+    },
+    "expected_action": "approved",
+    "expected_reason": "外部证据直接说明企业从事农作物种植，支持员工录入分类。",
+    "metric_tags": [
+      "accuracy",
+      "auto_approval_rate"
+    ],
+    "source_case_id": "case_003"
+  },
+  {
+    "case_id": "golden_007",
+    "scenario": "正确录入：软件公司业务证据支持软件开发分类",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "张三",
+      "entered_level1": "信软技术服务",
+      "entered_subcategory": "软件开发",
+      "entered_stage": "录入",
+      "company_raw": "杭州云启软件有限公司 https://yunqi.example.com",
+      "company_name": "杭州云启软件有限公司",
+      "website_url": "https://yunqi.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "公司主要提供企业管理系统、数据平台、软件开发、系统集成和运维服务。",
+      "quality_score": 92,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "提供企业管理系统、数据平台和软件开发服务",
+        "为客户提供系统集成和运维支持"
+      ],
+      "errors": []
+    },
+    "expected_action": "approved",
+    "expected_reason": "外部证据明确支持软件开发分类，证据质量高，风险低。",
+    "metric_tags": [
+      "accuracy",
+      "auto_approval_rate"
+    ],
+    "source_case_id": "case_001"
+  },
+  {
+    "case_id": "golden_008",
+    "scenario": "正确录入：医疗设备企业业务证据支持医疗设备分类",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "李四",
+      "entered_level1": "机械设备厂",
+      "entered_subcategory": "医疗设备",
+      "entered_stage": "录入",
+      "company_raw": "苏州康达医疗设备有限公司 https://kangda.example.com",
+      "company_name": "苏州康达医疗设备有限公司",
+      "website_url": "https://kangda.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "公司专注医用检测设备、康复设备、医疗器械配套系统的研发、生产和销售。",
+      "quality_score": 88,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "专注医用检测设备和康复设备",
+        "提供医疗器械配套系统研发生产"
+      ],
+      "errors": []
+    },
+    "expected_action": "approved",
+    "expected_reason": "企业主营业务与医疗设备分类一致，可以自动通过。",
+    "metric_tags": [
+      "accuracy",
+      "auto_approval_rate"
+    ],
+    "source_case_id": "case_002"
+  },
+  {
+    "case_id": "golden_009",
+    "scenario": "正确录入：农业种植企业业务证据支持种植业分类",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "王五",
+      "entered_level1": "种植业",
+      "entered_subcategory": "谷类",
+      "entered_stage": "录入",
+      "company_raw": "黑龙江丰禾农业发展有限公司 https://fenghe.example.com",
+      "company_name": "黑龙江丰禾农业发展有限公司",
+      "website_url": "https://fenghe.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "公司拥有粮食作物种植基地，主营玉米、水稻等农作物种植、农产品初加工和销售。",
+      "quality_score": 86,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "拥有粮食作物种植基地",
+        "主营农作物种植和农产品销售"
+      ],
+      "errors": []
+    },
+    "expected_action": "approved",
+    "expected_reason": "外部证据直接说明企业从事农作物种植，支持员工录入分类。",
+    "metric_tags": [
+      "accuracy",
+      "auto_approval_rate"
+    ],
+    "source_case_id": "case_003"
+  },
+  {
+    "case_id": "golden_010",
+    "scenario": "正确录入：软件公司业务证据支持软件开发分类",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "张三",
+      "entered_level1": "信软技术服务",
+      "entered_subcategory": "软件开发",
+      "entered_stage": "录入",
+      "company_raw": "杭州云启软件有限公司 https://yunqi.example.com",
+      "company_name": "杭州云启软件有限公司",
+      "website_url": "https://yunqi.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "公司主要提供企业管理系统、数据平台、软件开发、系统集成和运维服务。",
+      "quality_score": 92,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "提供企业管理系统、数据平台和软件开发服务",
+        "为客户提供系统集成和运维支持"
+      ],
+      "errors": []
+    },
+    "expected_action": "approved",
+    "expected_reason": "外部证据明确支持软件开发分类，证据质量高，风险低。",
+    "metric_tags": [
+      "accuracy",
+      "auto_approval_rate"
+    ],
+    "source_case_id": "case_001"
+  },
+  {
+    "case_id": "golden_011",
+    "scenario": "错误录入：软件公司被录成金融服务",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "赵六",
+      "entered_level1": "信软技术服务",
+      "entered_subcategory": "电信",
+      "entered_stage": "录入",
+      "company_raw": "上海智数软件科技有限公司 https://zhishu.example.com",
+      "company_name": "上海智数软件科技有限公司",
+      "website_url": "https://zhishu.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "公司主要面向制造企业提供数据中台、软件开发、工业互联网平台和系统集成服务。",
+      "quality_score": 90,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "提供数据中台和软件开发",
+        "服务方向为工业互联网平台和系统集成"
+      ],
+      "errors": []
+    },
+    "expected_action": "rejected",
+    "expected_reason": "证据显示企业主营软件和工业互联网服务，不支持金融服务分类，建议改为信软技术服务 / 软件开发。",
+    "expected_suggestion": "信软技术服务 / 软件和信息技术 / 软件开发",
+    "metric_tags": [
+      "accuracy",
+      "auto_rejection_rate"
+    ],
+    "source_case_id": "case_004"
+  },
+  {
+    "case_id": "golden_012",
+    "scenario": "错误录入：肥料生产企业被录成农业种植",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "钱七",
+      "entered_level1": "种植业",
+      "entered_subcategory": "谷类",
+      "entered_stage": "录入",
+      "company_raw": "山东沃田肥业有限公司 https://wotian.example.com",
+      "company_name": "山东沃田肥业有限公司",
+      "website_url": "https://wotian.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "公司主营复合肥、有机肥、水溶肥等肥料产品的研发、生产、销售和农业技术服务。",
+      "quality_score": 87,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "主营复合肥、有机肥和水溶肥",
+        "业务为肥料产品研发生产销售"
+      ],
+      "errors": []
+    },
+    "expected_action": "rejected",
+    "expected_reason": "企业主营肥料生产销售，不是直接从事农作物种植，员工分类不合理。",
+    "expected_suggestion": "石油化工 / 化学与化工工程 / 化肥",
+    "metric_tags": [
+      "accuracy",
+      "auto_rejection_rate"
+    ],
+    "source_case_id": "case_005"
+  },
+  {
+    "case_id": "golden_013",
+    "scenario": "错误录入：会展服务企业被录成医疗设备",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "孙八",
+      "entered_level1": "机械设备厂",
+      "entered_subcategory": "医疗设备",
+      "entered_stage": "录入",
+      "company_raw": "广州会联展览服务有限公司 https://huilian.example.com",
+      "company_name": "广州会联展览服务有限公司",
+      "website_url": "https://huilian.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "公司主要承办行业展会、会议论坛、展台设计搭建、品牌展示和会务服务。",
+      "quality_score": 84,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "主要承办行业展会和会议论坛",
+        "提供展台设计搭建和会务服务"
+      ],
+      "errors": []
+    },
+    "expected_action": "rejected",
+    "expected_reason": "证据显示企业从事会展服务，不支持医疗设备分类。",
+    "expected_suggestion": "会展服务 / 农林牧渔 / 航空航天设备",
+    "metric_tags": [
+      "accuracy",
+      "auto_rejection_rate"
+    ],
+    "source_case_id": "case_006"
+  },
+  {
+    "case_id": "golden_014",
+    "scenario": "错误录入：软件公司被录成金融服务",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "赵六",
+      "entered_level1": "信软技术服务",
+      "entered_subcategory": "电信",
+      "entered_stage": "录入",
+      "company_raw": "上海智数软件科技有限公司 https://zhishu.example.com",
+      "company_name": "上海智数软件科技有限公司",
+      "website_url": "https://zhishu.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "公司主要面向制造企业提供数据中台、软件开发、工业互联网平台和系统集成服务。",
+      "quality_score": 90,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "提供数据中台和软件开发",
+        "服务方向为工业互联网平台和系统集成"
+      ],
+      "errors": []
+    },
+    "expected_action": "rejected",
+    "expected_reason": "证据显示企业主营软件和工业互联网服务，不支持金融服务分类，建议改为信软技术服务 / 软件开发。",
+    "expected_suggestion": "信软技术服务 / 软件和信息技术 / 软件开发",
+    "metric_tags": [
+      "accuracy",
+      "auto_rejection_rate"
+    ],
+    "source_case_id": "case_004"
+  },
+  {
+    "case_id": "golden_015",
+    "scenario": "错误录入：肥料生产企业被录成农业种植",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "钱七",
+      "entered_level1": "种植业",
+      "entered_subcategory": "谷类",
+      "entered_stage": "录入",
+      "company_raw": "山东沃田肥业有限公司 https://wotian.example.com",
+      "company_name": "山东沃田肥业有限公司",
+      "website_url": "https://wotian.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "公司主营复合肥、有机肥、水溶肥等肥料产品的研发、生产、销售和农业技术服务。",
+      "quality_score": 87,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "主营复合肥、有机肥和水溶肥",
+        "业务为肥料产品研发生产销售"
+      ],
+      "errors": []
+    },
+    "expected_action": "rejected",
+    "expected_reason": "企业主营肥料生产销售，不是直接从事农作物种植，员工分类不合理。",
+    "expected_suggestion": "石油化工 / 化学与化工工程 / 化肥",
+    "metric_tags": [
+      "accuracy",
+      "auto_rejection_rate"
+    ],
+    "source_case_id": "case_005"
+  },
+  {
+    "case_id": "golden_016",
+    "scenario": "错误录入：会展服务企业被录成医疗设备",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "孙八",
+      "entered_level1": "机械设备厂",
+      "entered_subcategory": "医疗设备",
+      "entered_stage": "录入",
+      "company_raw": "广州会联展览服务有限公司 https://huilian.example.com",
+      "company_name": "广州会联展览服务有限公司",
+      "website_url": "https://huilian.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "公司主要承办行业展会、会议论坛、展台设计搭建、品牌展示和会务服务。",
+      "quality_score": 84,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "主要承办行业展会和会议论坛",
+        "提供展台设计搭建和会务服务"
+      ],
+      "errors": []
+    },
+    "expected_action": "rejected",
+    "expected_reason": "证据显示企业从事会展服务，不支持医疗设备分类。",
+    "expected_suggestion": "会展服务 / 农林牧渔 / 航空航天设备",
+    "metric_tags": [
+      "accuracy",
+      "auto_rejection_rate"
+    ],
+    "source_case_id": "case_006"
+  },
+  {
+    "case_id": "golden_017",
+    "scenario": "错误录入：软件公司被录成金融服务",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "赵六",
+      "entered_level1": "信软技术服务",
+      "entered_subcategory": "电信",
+      "entered_stage": "录入",
+      "company_raw": "上海智数软件科技有限公司 https://zhishu.example.com",
+      "company_name": "上海智数软件科技有限公司",
+      "website_url": "https://zhishu.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "公司主要面向制造企业提供数据中台、软件开发、工业互联网平台和系统集成服务。",
+      "quality_score": 90,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "提供数据中台和软件开发",
+        "服务方向为工业互联网平台和系统集成"
+      ],
+      "errors": []
+    },
+    "expected_action": "rejected",
+    "expected_reason": "证据显示企业主营软件和工业互联网服务，不支持金融服务分类，建议改为信软技术服务 / 软件开发。",
+    "expected_suggestion": "信软技术服务 / 软件和信息技术 / 软件开发",
+    "metric_tags": [
+      "accuracy",
+      "auto_rejection_rate"
+    ],
+    "source_case_id": "case_004"
+  },
+  {
+    "case_id": "golden_018",
+    "scenario": "错误录入：肥料生产企业被录成农业种植",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "钱七",
+      "entered_level1": "种植业",
+      "entered_subcategory": "谷类",
+      "entered_stage": "录入",
+      "company_raw": "山东沃田肥业有限公司 https://wotian.example.com",
+      "company_name": "山东沃田肥业有限公司",
+      "website_url": "https://wotian.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "公司主营复合肥、有机肥、水溶肥等肥料产品的研发、生产、销售和农业技术服务。",
+      "quality_score": 87,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "主营复合肥、有机肥和水溶肥",
+        "业务为肥料产品研发生产销售"
+      ],
+      "errors": []
+    },
+    "expected_action": "rejected",
+    "expected_reason": "企业主营肥料生产销售，不是直接从事农作物种植，员工分类不合理。",
+    "expected_suggestion": "石油化工 / 化学与化工工程 / 化肥",
+    "metric_tags": [
+      "accuracy",
+      "auto_rejection_rate"
+    ],
+    "source_case_id": "case_005"
+  },
+  {
+    "case_id": "golden_019",
+    "scenario": "错误录入：会展服务企业被录成医疗设备",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "孙八",
+      "entered_level1": "机械设备厂",
+      "entered_subcategory": "医疗设备",
+      "entered_stage": "录入",
+      "company_raw": "广州会联展览服务有限公司 https://huilian.example.com",
+      "company_name": "广州会联展览服务有限公司",
+      "website_url": "https://huilian.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "公司主要承办行业展会、会议论坛、展台设计搭建、品牌展示和会务服务。",
+      "quality_score": 84,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "主要承办行业展会和会议论坛",
+        "提供展台设计搭建和会务服务"
+      ],
+      "errors": []
+    },
+    "expected_action": "rejected",
+    "expected_reason": "证据显示企业从事会展服务，不支持医疗设备分类。",
+    "expected_suggestion": "会展服务 / 农林牧渔 / 航空航天设备",
+    "metric_tags": [
+      "accuracy",
+      "auto_rejection_rate"
+    ],
+    "source_case_id": "case_006"
+  },
+  {
+    "case_id": "golden_020",
+    "scenario": "错误录入：软件公司被录成金融服务",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "赵六",
+      "entered_level1": "信软技术服务",
+      "entered_subcategory": "电信",
+      "entered_stage": "录入",
+      "company_raw": "上海智数软件科技有限公司 https://zhishu.example.com",
+      "company_name": "上海智数软件科技有限公司",
+      "website_url": "https://zhishu.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "公司主要面向制造企业提供数据中台、软件开发、工业互联网平台和系统集成服务。",
+      "quality_score": 90,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "提供数据中台和软件开发",
+        "服务方向为工业互联网平台和系统集成"
+      ],
+      "errors": []
+    },
+    "expected_action": "rejected",
+    "expected_reason": "证据显示企业主营软件和工业互联网服务，不支持金融服务分类，建议改为信软技术服务 / 软件开发。",
+    "expected_suggestion": "信软技术服务 / 软件和信息技术 / 软件开发",
+    "metric_tags": [
+      "accuracy",
+      "auto_rejection_rate"
+    ],
+    "source_case_id": "case_004"
+  },
+  {
+    "case_id": "golden_021",
+    "scenario": "证据不足：企业官网缺失",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "周九",
+      "entered_level1": "信软技术服务",
+      "entered_subcategory": "软件开发",
+      "entered_stage": "录入",
+      "company_raw": "南京星河科技有限公司",
+      "company_name": "南京星河科技有限公司",
+      "website_url": ""
+    },
+    "mock_evidence": {
+      "business_scope": "",
+      "quality_score": 0,
+      "sources": [],
+      "snippets": [],
+      "errors": [
+        "官网链接缺失，无法采集外部证据"
+      ]
+    },
+    "expected_action": "needs_more_evidence",
+    "expected_reason": "缺少官网或外部证据，系统不能直接判断分类是否合理。",
+    "metric_tags": [
+      "accuracy",
+      "insufficient_evidence_rate"
+    ],
+    "source_case_id": "case_007"
+  },
+  {
+    "case_id": "golden_022",
+    "scenario": "证据不足：官网可访问但无有效业务文本",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "吴十",
+      "entered_level1": "种植业",
+      "entered_subcategory": "谷类",
+      "entered_stage": "录入",
+      "company_raw": "成都青禾生态农业有限公司 https://qinghe.example.com",
+      "company_name": "成都青禾生态农业有限公司",
+      "website_url": "https://qinghe.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "首页 导航 联系我们 新闻动态 版权所有",
+      "quality_score": 15,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "官网只有导航和联系方式，没有有效业务介绍"
+      ],
+      "errors": [
+        "官网文本清洗后无有效业务证据"
+      ]
+    },
+    "expected_action": "needs_more_evidence",
+    "expected_reason": "官网文本质量过低，无法证明企业是否从事农业种植。",
+    "metric_tags": [
+      "accuracy",
+      "insufficient_evidence_rate"
+    ],
+    "source_case_id": "case_008"
+  },
+  {
+    "case_id": "golden_023",
+    "scenario": "证据不足：企业官网缺失",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "周九",
+      "entered_level1": "信软技术服务",
+      "entered_subcategory": "软件开发",
+      "entered_stage": "录入",
+      "company_raw": "南京星河科技有限公司",
+      "company_name": "南京星河科技有限公司",
+      "website_url": ""
+    },
+    "mock_evidence": {
+      "business_scope": "",
+      "quality_score": 0,
+      "sources": [],
+      "snippets": [],
+      "errors": [
+        "官网链接缺失，无法采集外部证据"
+      ]
+    },
+    "expected_action": "needs_more_evidence",
+    "expected_reason": "缺少官网或外部证据，系统不能直接判断分类是否合理。",
+    "metric_tags": [
+      "accuracy",
+      "insufficient_evidence_rate"
+    ],
+    "source_case_id": "case_007"
+  },
+  {
+    "case_id": "golden_024",
+    "scenario": "证据不足：官网可访问但无有效业务文本",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "吴十",
+      "entered_level1": "种植业",
+      "entered_subcategory": "谷类",
+      "entered_stage": "录入",
+      "company_raw": "成都青禾生态农业有限公司 https://qinghe.example.com",
+      "company_name": "成都青禾生态农业有限公司",
+      "website_url": "https://qinghe.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "首页 导航 联系我们 新闻动态 版权所有",
+      "quality_score": 15,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "官网只有导航和联系方式，没有有效业务介绍"
+      ],
+      "errors": [
+        "官网文本清洗后无有效业务证据"
+      ]
+    },
+    "expected_action": "needs_more_evidence",
+    "expected_reason": "官网文本质量过低，无法证明企业是否从事农业种植。",
+    "metric_tags": [
+      "accuracy",
+      "insufficient_evidence_rate"
+    ],
+    "source_case_id": "case_008"
+  },
+  {
+    "case_id": "golden_025",
+    "scenario": "证据不足：企业官网缺失",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "周九",
+      "entered_level1": "信软技术服务",
+      "entered_subcategory": "软件开发",
+      "entered_stage": "录入",
+      "company_raw": "南京星河科技有限公司",
+      "company_name": "南京星河科技有限公司",
+      "website_url": ""
+    },
+    "mock_evidence": {
+      "business_scope": "",
+      "quality_score": 0,
+      "sources": [],
+      "snippets": [],
+      "errors": [
+        "官网链接缺失，无法采集外部证据"
+      ]
+    },
+    "expected_action": "needs_more_evidence",
+    "expected_reason": "缺少官网或外部证据，系统不能直接判断分类是否合理。",
+    "metric_tags": [
+      "accuracy",
+      "insufficient_evidence_rate"
+    ],
+    "source_case_id": "case_007"
+  },
+  {
+    "case_id": "golden_026",
+    "scenario": "人工复核：企业证据同时支持多个业务方向",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "郑十一",
+      "entered_level1": "信软技术服务",
+      "entered_subcategory": "软件开发",
+      "entered_stage": "录入",
+      "company_raw": "北京融合产业服务有限公司 https://ronghe.example.com",
+      "company_name": "北京融合产业服务有限公司",
+      "website_url": "https://ronghe.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "公司业务覆盖软件平台开发、农业技术咨询、行业会展活动组织和产业园运营服务。",
+      "quality_score": 68,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "业务覆盖软件平台开发",
+        "同时提供农业技术咨询和行业会展活动组织"
+      ],
+      "errors": []
+    },
+    "expected_action": "needs_human_review",
+    "expected_reason": "证据同时支持多个分类方向，系统不应强行自动通过或驳回，需要人工确认主营业务。",
+    "metric_tags": [
+      "accuracy",
+      "human_review_rate"
+    ],
+    "source_case_id": "case_009"
+  },
+  {
+    "case_id": "golden_027",
+    "scenario": "人工复核：员工录入分类不存在于内部规则",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "王十二",
+      "entered_level1": "未来产业服务",
+      "entered_subcategory": "元宇宙生态运营",
+      "entered_stage": "录入",
+      "company_raw": "深圳新界互动科技有限公司 https://xinjie.example.com",
+      "company_name": "深圳新界互动科技有限公司",
+      "website_url": "https://xinjie.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "公司提供三维互动展示、虚拟展厅、数字孪生展示系统和软件开发服务。",
+      "quality_score": 76,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "提供三维互动展示和虚拟展厅",
+        "提供数字孪生展示系统和软件开发服务"
+      ],
+      "errors": []
+    },
+    "expected_action": "needs_human_review",
+    "expected_reason": "员工录入分类不在首版内部规则表中，即使证据有业务信息，也需要人工复核分类口径。",
+    "metric_tags": [
+      "accuracy",
+      "human_review_rate"
+    ],
+    "source_case_id": "case_010"
+  },
+  {
+    "case_id": "golden_028",
+    "scenario": "人工复核：企业证据同时支持多个业务方向",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "郑十一",
+      "entered_level1": "信软技术服务",
+      "entered_subcategory": "软件开发",
+      "entered_stage": "录入",
+      "company_raw": "北京融合产业服务有限公司 https://ronghe.example.com",
+      "company_name": "北京融合产业服务有限公司",
+      "website_url": "https://ronghe.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "公司业务覆盖软件平台开发、农业技术咨询、行业会展活动组织和产业园运营服务。",
+      "quality_score": 68,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "业务覆盖软件平台开发",
+        "同时提供农业技术咨询和行业会展活动组织"
+      ],
+      "errors": []
+    },
+    "expected_action": "needs_human_review",
+    "expected_reason": "证据同时支持多个分类方向，系统不应强行自动通过或驳回，需要人工确认主营业务。",
+    "metric_tags": [
+      "accuracy",
+      "human_review_rate"
+    ],
+    "source_case_id": "case_009"
+  },
+  {
+    "case_id": "golden_029",
+    "scenario": "人工复核：员工录入分类不存在于内部规则",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "王十二",
+      "entered_level1": "未来产业服务",
+      "entered_subcategory": "元宇宙生态运营",
+      "entered_stage": "录入",
+      "company_raw": "深圳新界互动科技有限公司 https://xinjie.example.com",
+      "company_name": "深圳新界互动科技有限公司",
+      "website_url": "https://xinjie.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "公司提供三维互动展示、虚拟展厅、数字孪生展示系统和软件开发服务。",
+      "quality_score": 76,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "提供三维互动展示和虚拟展厅",
+        "提供数字孪生展示系统和软件开发服务"
+      ],
+      "errors": []
+    },
+    "expected_action": "needs_human_review",
+    "expected_reason": "员工录入分类不在首版内部规则表中，即使证据有业务信息，也需要人工复核分类口径。",
+    "metric_tags": [
+      "accuracy",
+      "human_review_rate"
+    ],
+    "source_case_id": "case_010"
+  },
+  {
+    "case_id": "golden_030",
+    "scenario": "人工复核：企业证据同时支持多个业务方向",
+    "input": {
+      "date": "2026-07-25",
+      "employee_name": "郑十一",
+      "entered_level1": "信软技术服务",
+      "entered_subcategory": "软件开发",
+      "entered_stage": "录入",
+      "company_raw": "北京融合产业服务有限公司 https://ronghe.example.com",
+      "company_name": "北京融合产业服务有限公司",
+      "website_url": "https://ronghe.example.com"
+    },
+    "mock_evidence": {
+      "business_scope": "公司业务覆盖软件平台开发、农业技术咨询、行业会展活动组织和产业园运营服务。",
+      "quality_score": 68,
+      "sources": [
+        "mock_company_provider"
+      ],
+      "snippets": [
+        "业务覆盖软件平台开发",
+        "同时提供农业技术咨询和行业会展活动组织"
+      ],
+      "errors": []
+    },
+    "expected_action": "needs_human_review",
+    "expected_reason": "证据同时支持多个分类方向，系统不应强行自动通过或驳回，需要人工确认主营业务。",
+    "metric_tags": [
+      "accuracy",
+      "human_review_rate"
+    ],
+    "source_case_id": "case_009"
+  }
+]

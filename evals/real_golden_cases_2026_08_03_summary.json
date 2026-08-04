@@ -1,0 +1,14 @@
+{
+  "source_file": "C:\\Users\\Administrator\\Desktop\\golden_eval_answer_reviewed_draft.xlsx",
+  "json_output": "D:\\audit-agent\\evals\\real_golden_cases_2026_08_03.json",
+  "excel_output": "D:\\audit-agent\\evals\\real_golden_cases_2026_08_03.xlsx",
+  "case_count": 45,
+  "action_counts": {
+    "needs_human_review": 16,
+    "approved": 28,
+    "needs_more_evidence": 1
+  },
+  "agent_action_match_count": 40,
+  "agent_action_mismatch_count": 5,
+  "agent_action_match_rate": 0.8889
+}

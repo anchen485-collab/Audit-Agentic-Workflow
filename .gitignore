@@ -1,0 +1,17 @@
+.venv/
+.idea/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+*.egg-info/
+
+.env
+storage/uploads/*
+storage/outputs/*
+storage/logs/*
+storage/*.db
+
+!storage/uploads/.gitkeep
+!storage/outputs/.gitkeep
+!storage/logs/.gitkeep
