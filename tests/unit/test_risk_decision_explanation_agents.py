@@ -1,9 +1,17 @@
 from app.agents.decision_agent import DecisionAgent
+from app.agents.decision_verifier import DecisionVerifier
 from app.agents.explanation_agent import ExplanationAgent
 from app.agents.llm_classification_provider import SemanticClassificationResult
 from app.agents.risk_agent import RiskAgent, RiskAssessment, RiskLevel
 from app.domain.decisions import DecisionAction, DecisionStatus
-from app.domain.models import AuditCase, CandidateRuleSet, CategoryRule, EvidencePackage, EvidenceSnippet
+from app.domain.models import (
+    ApprovalDecision,
+    AuditCase,
+    CandidateRuleSet,
+    CategoryRule,
+    EvidencePackage,
+    EvidenceSnippet,
+)
 
 
 def test_risk_agent_marks_low_quality_evidence_as_high_risk():
@@ -169,6 +177,61 @@ def test_decision_agent_rejects_with_matched_candidate_rule_id():
 
     assert result.value.action == DecisionAction.REJECTED
     assert "Software / Information Technology / Software Development" in result.value.suggestion
+
+
+def test_decision_verifier_keeps_valid_auto_approval():
+    """满足所有自动审批条件时，Verifier 不应该改变原结论。"""
+    decision = DecisionAgent().run(
+        audit_case=_build_case(),
+        evidence=_build_evidence(),
+        candidate_rules=_build_rules(),
+        classification_result=_classification_result("supports_entered_category"),
+        risk_assessment=RiskAssessment(
+            case_id="case_001",
+            risk_level=RiskLevel.LOW,
+            risk_score=20,
+            reasons=[],
+        ),
+    ).value
+
+    result = DecisionVerifier().run(
+        audit_case=_build_case(),
+        evidence=_build_evidence(),
+        candidate_rules=_build_rules(),
+        classification_result=_classification_result("supports_entered_category"),
+        decision=decision,
+    )
+
+    assert result.value.action == DecisionAction.APPROVED
+    assert result.assessment.output["verified"] is True
+    assert result.assessment.output["changed"] is False
+
+
+def test_decision_verifier_downgrades_invalid_auto_approval_to_human_review():
+    """语义结果与自动通过不一致时，Verifier 必须转人工复核。"""
+    decision = ApprovalDecision(
+        case_id="case_001",
+        action=DecisionAction.APPROVED,
+        status=DecisionStatus.COMPLETED,
+        confidence=90,
+        risk_score=20,
+        reason="测试自动通过。",
+        needs_review=False,
+    )
+
+    result = DecisionVerifier().run(
+        audit_case=_build_case(),
+        evidence=_build_evidence(),
+        candidate_rules=_build_rules(),
+        classification_result=_classification_result("conflicts_with_entered_category"),
+        decision=decision,
+    )
+
+    assert result.value.action == DecisionAction.NEEDS_HUMAN_REVIEW
+    assert result.value.status == DecisionStatus.PENDING_REVIEW
+    assert result.value.needs_review is True
+    assert result.assessment.output["verified"] is False
+    assert result.assessment.output["changed"] is True
 
 
 def _build_case() -> AuditCase:

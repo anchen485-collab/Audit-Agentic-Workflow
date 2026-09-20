@@ -17,10 +17,12 @@ from app.api.schemas import (
     AuditBatchListResponse,
     AuditBatchSummaryResponse,
     AuditUploadResponse,
+    CaseRetryResponse,
     LLMHealthResponse,
     ReviewDecisionRequest,
     ReviewTaskListResponse,
 )
+from app.domain.errors import CaseRetryConflictError, CaseRetryNotFoundError
 from app.domain.models import CurrentUser
 from app.infrastructure.batch_repository import AuditBatchRecord, record_file_access_audit_log
 from app.infrastructure.excel_reader import read_audit_excel
@@ -40,6 +42,7 @@ from app.services.batch_service import (
     save_audit_batch_summary,
     submit_review_decision,
 )
+from app.services.case_retry_service import retry_audit_case
 from app.services.case_service import create_audit_cases_with_errors
 from app.services.result_file_service import create_result_excel, find_or_rebuild_result_excel
 from app.services.review_service import create_review_tasks
@@ -338,6 +341,44 @@ def list_audit_batch_assessments_api(
         case_id=case_id,
     )
     return {"total": len(items), "items": items}
+
+
+@router.post("/batches/{batch_id}/cases/{case_id}/retry", response_model=CaseRetryResponse)
+def retry_audit_case_api(
+    batch_id: str,
+    case_id: str,
+    settings: Annotated[Settings, Depends(get_app_settings)],
+    rule_file: Annotated[Path, Depends(get_rule_file_path)],
+    evidence_provider: Annotated[EvidenceProvider, Depends(get_evidence_provider)],
+    classification_provider: Annotated[ClassificationProvider, Depends(get_classification_provider)],
+    current_user: Annotated[CurrentUser, Depends(require_any_role({"uploader", "reviewer", "auditor"}))],
+) -> CaseRetryResponse:
+    """重新执行单条审批单；已提交人工最终结论的记录保持不变。"""
+    try:
+        result = retry_audit_case(
+            batch_id=batch_id,
+            case_id=case_id,
+            tenant_id=current_user.tenant_id,
+            retried_by=current_user.user_id,
+            rules=load_category_rules(rule_file),
+            evidence_provider=evidence_provider,
+            classification_provider=classification_provider,
+            settings=settings,
+        )
+        logger.info(
+            "审批单重试完成: batch_id=%s case_id=%s trace_id=%s user_id=%s",
+            batch_id,
+            case_id,
+            result["retry_trace_id"],
+            current_user.user_id,
+        )
+        return CaseRetryResponse(**result)
+    except CaseRetryNotFoundError as error:
+        raise HTTPException(status_code=404, detail=error.message) from error
+    except CaseRetryConflictError as error:
+        raise HTTPException(status_code=409, detail=error.message) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @review_router.get("/tasks", response_model=ReviewTaskListResponse)

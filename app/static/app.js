@@ -13,6 +13,7 @@ const downloadButton = getDownloadButtonElement();
 
 let latestRows = [];
 let latestDownloadUrl = "";
+let latestBatchId = "";
 
 const actionText = {
     approved: "自动通过",
@@ -37,6 +38,15 @@ actionFilter.addEventListener("change", () => {
 
 downloadButton.addEventListener("click", async () => {
     await downloadResultExcel();
+});
+
+resultRows.addEventListener("click", async (event) => {
+    const retryButton = event.target.closest("[data-retry-case-id]");
+    if (!retryButton) {
+        return;
+    }
+
+    await retryAuditCase(retryButton.dataset.retryCaseId, retryButton);
 });
 
 uploadForm.addEventListener("submit", async (event) => {
@@ -72,6 +82,7 @@ uploadForm.addEventListener("submit", async (event) => {
         }
 
         latestRows = buildDecisionRows(data);
+        latestBatchId = data.batch_id;
         renderMetrics(data.metrics || {});
         renderDecisionRows(latestRows);
         renderReviewRows(data.review_tasks || []);
@@ -79,7 +90,7 @@ uploadForm.addEventListener("submit", async (event) => {
         setStatus(`批次 ${data.batch_id} 已完成`, false);
     } catch (error) {
         setStatus(error.message, true);
-        renderEmpty(resultRows, 13, "暂无审批结果");
+        renderEmpty(resultRows, 14, "暂无审批结果");
         renderEmpty(reviewRows, 5, "暂无人工复核任务");
     } finally {
         submitButton.disabled = false;
@@ -122,7 +133,7 @@ function renderDecisionRows(rows) {
         : rows;
 
     if (!visibleRows.length) {
-        renderEmpty(resultRows, 13, "暂无审批结果");
+        renderEmpty(resultRows, 14, "暂无审批结果");
         return;
     }
 
@@ -141,8 +152,51 @@ function renderDecisionRows(rows) {
             <td>${row.needs_review ? "是" : "否"}</td>
             <td class="reason-cell">${renderLongText(row.reason || "")}</td>
             <td>${renderLongText(row.suggestion || "")}</td>
+            <td>${renderRetryButton(row.case_id)}</td>
         </tr>
     `).join("");
+}
+
+function renderRetryButton(caseId) {
+    if (!latestBatchId || !caseId) {
+        return "";
+    }
+
+    return `<button class="retry-button" type="button" data-retry-case-id="${escapeHtml(caseId)}">重新审批</button>`;
+}
+
+async function retryAuditCase(caseId, button) {
+    if (!latestBatchId || !caseId) {
+        setStatus("请先完成一次审批后再重试", true);
+        return;
+    }
+    if (!getAuthToken()) {
+        setStatus("请先填写访问令牌", true);
+        return;
+    }
+
+    button.disabled = true;
+    setStatus(`正在重新审批 ${caseId}`, false);
+    try {
+        const response = await fetch(`/api/audit/batches/${encodeURIComponent(latestBatchId)}/cases/${encodeURIComponent(caseId)}/retry`, {
+            method: "POST",
+            headers: buildAuthHeaders(),
+        });
+        if (!response.ok) {
+            throw new Error(await readErrorMessage(response));
+        }
+
+        const data = await response.json();
+        latestRows = latestRows.map((row) => row.case_id === caseId ? { ...row, ...data.decision } : row);
+        renderMetrics(data.metrics || {});
+        renderDecisionRows(latestRows);
+        renderReviewRows(data.review_tasks || []);
+        setStatus(`审批单 ${caseId} 已重新审批`, false);
+    } catch (error) {
+        setStatus(error.message, true);
+    } finally {
+        button.disabled = false;
+    }
 }
 
 function renderReviewRows(tasks) {
@@ -255,10 +309,11 @@ function triggerBlobDownload(blob, filename) {
 function clearTables() {
     metricsPanel.innerHTML = "";
     latestRows = [];
-    renderEmpty(resultRows, 13, "审批处理中");
+    renderEmpty(resultRows, 14, "审批处理中");
     renderEmpty(reviewRows, 5, "审批处理中");
     reviewCount.textContent = "0 条";
     latestDownloadUrl = "";
+    latestBatchId = "";
     downloadButton.classList.add("is-hidden");
 }
 

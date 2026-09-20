@@ -8,6 +8,7 @@ from app.workflow.nodes import (
     decide_action_node,
     explain_decisions_node,
     retrieve_rules_node,
+    verify_decisions_node,
 )
 from app.workflow.routing import route_decision
 from app.workflow.state import AuditWorkflowState, EvidenceProvider
@@ -25,4 +26,5 @@ __all__ = [
     "explain_decisions_node",
     "retrieve_rules_node",
     "route_decision",
+    "verify_decisions_node",
 ]

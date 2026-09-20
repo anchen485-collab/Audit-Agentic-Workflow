@@ -55,6 +55,19 @@ class ReviewDecisionRequest(BaseModel):
     final_action: ReviewFinalAction = Field(description="人工最终动作，例如 approved、rejected、unable_to_decide")
 
 
+class CaseRetryResponse(BaseModel):
+    """单条审批单重试后的当前结果。"""
+
+    batch_id: str = Field(description="所属审批批次 ID")
+    case_id: str = Field(description="被重新审批的审批单 ID")
+    retry_trace_id: str = Field(description="本次重试的 Trace ID")
+    previous_action: str = Field(description="重试前的系统审批动作")
+    decision: dict = Field(description="重试后的当前审批结论")
+    review_task: dict | None = Field(default=None, description="重试后需要人工复核时创建的任务")
+    review_tasks: list[dict] = Field(description="该批次最新的人工复核任务列表")
+    metrics: dict[str, float | int] = Field(description="重试后重新汇总的批次指标")
+
+
 class LLMHealthResponse(BaseModel):
     """LLM 健康检查响应，不包含 API Key。"""
 

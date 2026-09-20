@@ -76,6 +76,7 @@ def test_audit_workflow_returns_decision_and_metrics():
         "evidence_agent",
         "rule_agent",
         "classification_agent",
+        "decision_verifier",
     }
     assert {assessment.agent_name for assessment in result["assessments"]["case_001"]} >= {
         "evidence_agent",

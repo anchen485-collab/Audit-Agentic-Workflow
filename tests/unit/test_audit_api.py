@@ -6,7 +6,7 @@ from openpyxl import Workbook, load_workbook
 
 from app.api.app import create_app
 from app.api.dependencies import get_app_settings
-from app.infrastructure.batch_repository import list_file_access_audit_log_payloads
+from app.infrastructure.batch_repository import list_case_retry_log_payloads, list_file_access_audit_log_payloads
 from app.infrastructure.settings import Settings
 
 
@@ -486,6 +486,110 @@ def test_upload_audit_excel_keeps_invalid_rows_as_review_tasks(test_client, tmp_
     assert data["case_count"] == 2
     assert data["decision_count"] == 2
     assert any("缺少必填字段" in decision["reason"] for decision in data["decisions"])
+
+
+def test_retry_audit_case_replaces_current_result_and_records_audit_log(test_client, tmp_path):
+    """单条审批单重试后应更新当前结论，并保留一条可追踪的重试记录。"""
+    excel_path = tmp_path / "audit_cases.xlsx"
+    _create_sample_excel(excel_path)
+
+    with excel_path.open("rb") as file:
+        upload_response = test_client.post(
+            "/api/audit/upload",
+            files={
+                "file": (
+                    "audit_cases.xlsx",
+                    file,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
+
+    assert upload_response.status_code == 200
+    uploaded = upload_response.json()
+    case_id = uploaded["cases"][0]["case_id"]
+
+    retry_response = test_client.post(
+        f"/api/audit/batches/{uploaded['batch_id']}/cases/{case_id}/retry",
+    )
+
+    assert retry_response.status_code == 200
+    retried = retry_response.json()
+    assert retried["case_id"] == case_id
+    assert retried["retry_trace_id"].startswith("trace_")
+    assert retried["decision"]["case_id"] == case_id
+    assert retried["metrics"]["decision_count"] == 1
+
+    logs = list_case_retry_log_payloads(tmp_path / "audit_agent.db", uploaded["batch_id"], case_id)
+    assert len(logs) == 1
+    assert logs[0]["retry_trace_id"] == retried["retry_trace_id"]
+
+
+def test_retry_problem_case_keeps_current_review_task_in_sync(test_client, tmp_path):
+    """证据不足的审批单可重试，重试后的复核任务与当前结论保持一致。"""
+    excel_path = tmp_path / "audit_cases.xlsx"
+    _create_missing_evidence_excel(excel_path)
+
+    with excel_path.open("rb") as file:
+        upload_response = test_client.post(
+            "/api/audit/upload",
+            files={
+                "file": (
+                    "audit_cases.xlsx",
+                    file,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
+
+    uploaded = upload_response.json()
+    case_id = uploaded["cases"][0]["case_id"]
+    retry_response = test_client.post(
+        f"/api/audit/batches/{uploaded['batch_id']}/cases/{case_id}/retry",
+    )
+
+    assert retry_response.status_code == 200
+    retried = retry_response.json()
+    assert retried["decision"]["action"] == "needs_more_evidence"
+    assert retried["review_task"]["case_id"] == case_id
+    assert retried["review_task"]["status"] == "pending"
+
+
+def test_retry_does_not_override_completed_manual_review(test_client, tmp_path):
+    """人工已提交最终结论后，重试接口应拒绝覆盖该结论。"""
+    excel_path = tmp_path / "audit_cases.xlsx"
+    _create_missing_evidence_excel(excel_path)
+
+    with excel_path.open("rb") as file:
+        upload_response = test_client.post(
+            "/api/audit/upload",
+            files={
+                "file": (
+                    "audit_cases.xlsx",
+                    file,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
+
+    assert upload_response.status_code == 200
+    uploaded = upload_response.json()
+    case_id = uploaded["cases"][0]["case_id"]
+    task = test_client.get("/api/review/tasks").json()["items"][0]
+    manual_response = test_client.post(
+        f"/api/review/tasks/{task['task_id']}/decision",
+        json={"final_action": "approved"},
+    )
+    assert manual_response.status_code == 200
+
+    retry_response = test_client.post(
+        f"/api/audit/batches/{uploaded['batch_id']}/cases/{case_id}/retry",
+    )
+
+    assert retry_response.status_code == 409
+    assert "人工最终结论" in retry_response.json()["detail"]
+    decisions = test_client.get(f"/api/audit/batches/{uploaded['batch_id']}/decisions").json()["items"]
+    assert decisions[0]["manual_final_action"] == "approved"
 
 
 def _create_missing_evidence_excel(path):

@@ -141,6 +141,22 @@ def init_database(database_path: Path) -> None:
             )
             """
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS case_retry_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                batch_id TEXT NOT NULL,
+                case_id TEXT NOT NULL,
+                tenant_id TEXT NOT NULL DEFAULT 'default',
+                retry_trace_id TEXT NOT NULL,
+                retried_by TEXT NOT NULL,
+                old_action TEXT NOT NULL,
+                new_action TEXT NOT NULL,
+                retried_at TEXT NOT NULL,
+                payload_json TEXT NOT NULL
+            )
+            """
+        )
         connection.commit()
 
 

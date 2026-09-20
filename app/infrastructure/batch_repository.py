@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from app.domain.errors import CaseRetryConflictError
 from app.infrastructure.database import connect_database, init_database
 
 
@@ -260,6 +261,52 @@ def list_case_payloads(database_path: Path, batch_id: str) -> list[dict[str, Any
     return _list_payloads(database_path, "audit_cases", "batch_id = ?", (batch_id,))
 
 
+def get_case_payload(
+    database_path: Path,
+    batch_id: str,
+    case_id: str,
+    tenant_id: str | None = None,
+) -> dict[str, Any] | None:
+    """读取一条审批单，重试前必须同时校验批次和租户。"""
+    init_database(database_path)
+    where_clause = "batch_id = ? AND case_id = ?"
+    params: tuple[Any, ...] = (batch_id, case_id)
+    if tenant_id:
+        where_clause += " AND tenant_id = ?"
+        params = (batch_id, case_id, tenant_id)
+
+    with connect_database(database_path) as connection:
+        row = connection.execute(
+            f"SELECT payload_json FROM audit_cases WHERE {where_clause}",
+            params,
+        ).fetchone()
+
+    return json.loads(row["payload_json"]) if row is not None else None
+
+
+def get_decision_payload(
+    database_path: Path,
+    batch_id: str,
+    case_id: str,
+    tenant_id: str | None = None,
+) -> dict[str, Any] | None:
+    """读取一条当前审批结论，供重试前的人工结论保护使用。"""
+    init_database(database_path)
+    where_clause = "batch_id = ? AND case_id = ?"
+    params: tuple[Any, ...] = (batch_id, case_id)
+    if tenant_id:
+        where_clause += " AND tenant_id = ?"
+        params = (batch_id, case_id, tenant_id)
+
+    with connect_database(database_path) as connection:
+        row = connection.execute(
+            f"SELECT payload_json FROM audit_decisions WHERE {where_clause}",
+            params,
+        ).fetchone()
+
+    return json.loads(row["payload_json"]) if row is not None else None
+
+
 def list_decision_payloads(database_path: Path, batch_id: str) -> list[dict[str, Any]]:
     """查询某个批次的审批结论明细。"""
     return _list_payloads(database_path, "audit_decisions", "batch_id = ?", (batch_id,))
@@ -309,6 +356,224 @@ def list_agent_assessment_payloads(
         )
 
     return _list_payloads(database_path, "agent_assessments", "batch_id = ?", (batch_id,))
+
+
+def replace_case_after_retry(
+    database_path: Path,
+    batch_id: str,
+    case_id: str,
+    tenant_id: str,
+    decision: dict[str, Any],
+    evidence_package: dict[str, Any],
+    assessments: list[dict[str, Any]],
+    review_task: dict[str, Any] | None,
+    retry_trace_id: str,
+    retried_by: str,
+) -> None:
+    """原子替换一条审批单的当前结果，并留下重试审计记录。"""
+    init_database(database_path)
+
+    with connect_database(database_path) as connection:
+        case_row = connection.execute(
+            """
+            SELECT 1 FROM audit_cases
+            WHERE batch_id = ? AND case_id = ? AND tenant_id = ?
+            """,
+            (batch_id, case_id, tenant_id),
+        ).fetchone()
+        if case_row is None:
+            raise ValueError("未找到需要重试的审批单。")
+
+        old_decision_row = connection.execute(
+            """
+            SELECT payload_json FROM audit_decisions
+            WHERE batch_id = ? AND case_id = ? AND tenant_id = ?
+            """,
+            (batch_id, case_id, tenant_id),
+        ).fetchone()
+        if old_decision_row is None:
+            raise ValueError("未找到审批单的原始结论。")
+
+        old_decision = json.loads(old_decision_row["payload_json"])
+        manual_final_action = old_decision.get("manual_final_action")
+        completed_review = connection.execute(
+            """
+            SELECT 1 FROM review_tasks
+            WHERE batch_id = ? AND case_id = ? AND tenant_id = ? AND status = 'completed'
+            """,
+            (batch_id, case_id, tenant_id),
+        ).fetchone()
+        if manual_final_action or completed_review is not None:
+            raise CaseRetryConflictError("该审批单已有人工最终结论，重试不会覆盖人工审核结果。")
+
+        decision_payload = {**decision, "tenant_id": tenant_id}
+        connection.execute(
+            """
+            UPDATE audit_decisions
+            SET payload_json = ?
+            WHERE batch_id = ? AND case_id = ? AND tenant_id = ?
+            """,
+            (_to_json(decision_payload), batch_id, case_id, tenant_id),
+        )
+
+        evidence_payload = {**evidence_package, "tenant_id": tenant_id}
+        connection.execute(
+            """
+            INSERT OR REPLACE INTO evidence_packages (case_id, batch_id, tenant_id, payload_json)
+            VALUES (?, ?, ?, ?)
+            """,
+            (case_id, batch_id, tenant_id, _to_json(evidence_payload)),
+        )
+
+        connection.execute(
+            "DELETE FROM agent_assessments WHERE batch_id = ? AND case_id = ? AND tenant_id = ?",
+            (batch_id, case_id, tenant_id),
+        )
+        for assessment in assessments:
+            assessment_payload = {
+                **assessment,
+                "batch_id": batch_id,
+                "case_id": case_id,
+                "tenant_id": tenant_id,
+            }
+            connection.execute(
+                """
+                INSERT INTO agent_assessments (
+                    batch_id, case_id, tenant_id, agent_name, status, duration_ms, payload_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    batch_id,
+                    case_id,
+                    tenant_id,
+                    assessment["agent_name"],
+                    assessment["status"],
+                    float(assessment.get("duration_ms", 0.0)),
+                    _to_json(assessment_payload),
+                ),
+            )
+
+        if review_task is None:
+            connection.execute(
+                """
+                DELETE FROM review_tasks
+                WHERE batch_id = ? AND case_id = ? AND tenant_id = ? AND status != 'completed'
+                """,
+                (batch_id, case_id, tenant_id),
+            )
+        else:
+            review_payload = {
+                **review_task,
+                "batch_id": batch_id,
+                "tenant_id": tenant_id,
+            }
+            connection.execute(
+                """
+                INSERT OR REPLACE INTO review_tasks (
+                    task_id, batch_id, case_id, tenant_id, status, reviewer, final_action, payload_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    review_task["task_id"],
+                    batch_id,
+                    case_id,
+                    tenant_id,
+                    review_task.get("status", "pending"),
+                    review_task.get("reviewer"),
+                    review_task.get("final_action"),
+                    _to_json(review_payload),
+                ),
+            )
+
+        retry_payload = {
+            "batch_id": batch_id,
+            "case_id": case_id,
+            "tenant_id": tenant_id,
+            "retry_trace_id": retry_trace_id,
+            "retried_by": retried_by,
+            "old_action": old_decision.get("action", ""),
+            "new_action": decision.get("action", ""),
+            "old_reason": old_decision.get("reason", ""),
+            "new_reason": decision.get("reason", ""),
+            "retried_at": new_created_at(),
+        }
+        connection.execute(
+            """
+            INSERT INTO case_retry_logs (
+                batch_id, case_id, tenant_id, retry_trace_id, retried_by,
+                old_action, new_action, retried_at, payload_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                batch_id,
+                case_id,
+                tenant_id,
+                retry_trace_id,
+                retried_by,
+                retry_payload["old_action"],
+                retry_payload["new_action"],
+                retry_payload["retried_at"],
+                _to_json(retry_payload),
+            ),
+        )
+        connection.execute(
+            "UPDATE audit_batches SET result_dirty = 1 WHERE batch_id = ? AND tenant_id = ?",
+            (batch_id, tenant_id),
+        )
+        connection.commit()
+
+
+def update_batch_decision_metrics(
+    database_path: Path,
+    batch_id: str,
+    tenant_id: str,
+    metrics: dict[str, float | int],
+) -> None:
+    """重试后仅刷新会随审批动作变化的批次汇总指标。"""
+    init_database(database_path)
+    with connect_database(database_path) as connection:
+        connection.execute(
+            """
+            UPDATE audit_batches
+            SET decision_count = ?,
+                review_task_count = ?,
+                auto_handled_count = ?,
+                review_count = ?,
+                auto_handled_rate = ?,
+                review_rate = ?
+            WHERE batch_id = ? AND tenant_id = ?
+            """,
+            (
+                int(metrics.get("decision_count", 0)),
+                int(metrics.get("review_task_count", 0)),
+                int(metrics.get("auto_handled_count", 0)),
+                int(metrics.get("review_count", 0)),
+                float(metrics.get("auto_handled_rate", 0.0)),
+                float(metrics.get("review_rate", 0.0)),
+                batch_id,
+                tenant_id,
+            ),
+        )
+        connection.commit()
+
+
+def list_case_retry_log_payloads(
+    database_path: Path,
+    batch_id: str,
+    case_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """查询 Case 重试历史，供测试、审计与后续界面展示使用。"""
+    if case_id:
+        return _list_payloads(
+            database_path,
+            "case_retry_logs",
+            "batch_id = ? AND case_id = ?",
+            (batch_id, case_id),
+        )
+    return _list_payloads(database_path, "case_retry_logs", "batch_id = ?", (batch_id,))
 
 
 def complete_review_task(

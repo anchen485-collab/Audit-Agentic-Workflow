@@ -59,6 +59,20 @@ class RuleNotFoundError(AuditError):
         super().__init__(message, "rule_not_found")
 
 
+class CaseRetryNotFoundError(AuditError):
+    """需要重试的审批单或批次不存在。"""
+
+    def __init__(self, message: str):
+        super().__init__(message, "case_retry_not_found")
+
+
+class CaseRetryConflictError(AuditError):
+    """审批单已有人工最终结论，不能再由自动重试覆盖。"""
+
+    def __init__(self, message: str):
+        super().__init__(message, "case_retry_conflict")
+
+
 def action_for_error(error: AuditError) -> DecisionAction:
     """把业务错误映射为审批动作，避免异常直接打断整批流程。"""
     if isinstance(error, EvidenceUnavailableError):

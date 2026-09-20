@@ -5,6 +5,7 @@ from typing import Any
 
 from app.agents.classification_agent import ClassificationAgent
 from app.agents.decision_agent import DecisionAgent
+from app.agents.decision_verifier import DecisionVerifier
 from app.agents.evidence_agent import EvidenceAgent
 from app.agents.explanation_agent import ExplanationAgent
 from app.agents.llm_classification_provider import MockClassificationProvider
@@ -199,6 +200,42 @@ def decide_action_node(state: AuditWorkflowState) -> dict[str, Any]:
         }
 
     return _run_node(state, "decision_agent", execute)
+
+
+def verify_decisions_node(state: AuditWorkflowState) -> dict[str, Any]:
+    """校验自动审批结论；校验失败的记录转入人工复核。"""
+
+    def execute() -> dict[str, Any]:
+        agent = DecisionVerifier()
+        decisions_by_case_id = {decision.case_id: decision for decision in state["decisions"]}
+        assessments = {}
+
+        def verify_case(audit_case):
+            return agent.run(
+                audit_case=audit_case,
+                evidence=state["evidence_packages"][audit_case.case_id],
+                candidate_rules=state["rule_sets"][audit_case.case_id],
+                classification_result=state["classification_results"][audit_case.case_id],
+                decision=decisions_by_case_id[audit_case.case_id],
+            )
+
+        results = _run_cases_parallel(
+            cases=state["cases"],
+            max_workers=_concurrency(state, "lightweight_agent_concurrency", 8),
+            worker=verify_case,
+        )
+
+        verified_decisions = []
+        for audit_case, result in results:
+            verified_decisions.append(result.value)
+            assessments[audit_case.case_id] = [result.assessment]
+
+        return {
+            "decisions": verified_decisions,
+            "assessments": assessments,
+        }
+
+    return _run_node(state, "decision_verifier", execute)
 
 
 def explain_decisions_node(state: AuditWorkflowState) -> dict[str, Any]:

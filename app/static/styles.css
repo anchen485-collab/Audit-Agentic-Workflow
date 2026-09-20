@@ -290,6 +290,16 @@ table {
     width: 120px;
 }
 
+.col-retry {
+    width: 92px;
+}
+
+.retry-button {
+    min-width: 76px;
+    padding: 8px 10px;
+    font-size: 13px;
+}
+
 .col-confidence,
 .col-risk {
     width: 86px;
