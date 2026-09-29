@@ -60,6 +60,9 @@ class CaseRetryResponse(BaseModel):
 
     batch_id: str = Field(description="所属审批批次 ID")
     case_id: str = Field(description="被重新审批的审批单 ID")
+    attempt_id: str = Field(description="本次重试尝试 ID")
+    idempotency_key: str = Field(description="用于避免重复执行的幂等键")
+    idempotent_replay: bool = Field(default=False, description="本响应是否来自已完成重试的结果回放")
     retry_trace_id: str = Field(description="本次重试的 Trace ID")
     previous_action: str = Field(description="重试前的系统审批动作")
     decision: dict = Field(description="重试后的当前审批结论")

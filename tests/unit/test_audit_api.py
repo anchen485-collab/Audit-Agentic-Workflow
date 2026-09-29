@@ -161,6 +161,15 @@ def test_frontend_validates_token_before_uploading():
     assert "if (!getAuthToken())" in app_js
 
 
+def test_frontend_retry_uses_idempotency_key():
+    """前端重试请求应携带幂等键，避免网络抖动造成重复执行。"""
+    app_js = (Path(__file__).resolve().parents[2] / "app" / "static" / "app.js").read_text(encoding="utf-8")
+
+    assert '"Idempotency-Key": idempotencyKey' in app_js
+    assert "createRetryIdempotencyKey" in app_js
+    assert 'response.headers.has("Retry-After")' in app_js
+
+
 def test_upload_audit_excel_rejects_non_xlsx_file():
     """上传非 xlsx 文件时，应该返回 400。"""
     client = TestClient(create_app())
@@ -523,6 +532,76 @@ def test_retry_audit_case_replaces_current_result_and_records_audit_log(test_cli
     logs = list_case_retry_log_payloads(tmp_path / "audit_agent.db", uploaded["batch_id"], case_id)
     assert len(logs) == 1
     assert logs[0]["retry_trace_id"] == retried["retry_trace_id"]
+
+
+def test_retry_same_idempotency_key_replays_result_without_duplicate_execution(test_client, tmp_path):
+    """相同幂等键重复提交时，应返回第一次结果且只写一条成功审计记录。"""
+    excel_path = tmp_path / "audit_cases.xlsx"
+    _create_sample_excel(excel_path)
+
+    with excel_path.open("rb") as file:
+        upload_response = test_client.post(
+            "/api/audit/upload",
+            files={
+                "file": (
+                    "audit_cases.xlsx",
+                    file,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
+
+    uploaded = upload_response.json()
+    case_id = uploaded["cases"][0]["case_id"]
+    retry_url = f"/api/audit/batches/{uploaded['batch_id']}/cases/{case_id}/retry"
+    headers = {"Idempotency-Key": "retry-api-key-0001"}
+
+    first = test_client.post(retry_url, headers=headers)
+    second = test_client.post(retry_url, headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    first_data = first.json()
+    second_data = second.json()
+    assert first_data["idempotent_replay"] is False
+    assert second_data["idempotent_replay"] is True
+    assert second_data["attempt_id"] == first_data["attempt_id"]
+    assert second_data["retry_trace_id"] == first_data["retry_trace_id"]
+
+    logs = list_case_retry_log_payloads(tmp_path / "audit_agent.db", uploaded["batch_id"], case_id)
+    assert len(logs) == 1
+    attempts_response = test_client.get(
+        f"/api/audit/batches/{uploaded['batch_id']}/cases/{case_id}/retry-attempts"
+    )
+    assert attempts_response.status_code == 200
+    assert attempts_response.json()["total"] == 1
+    assert attempts_response.json()["items"][0]["status"] == "succeeded"
+
+
+def test_retry_rejects_invalid_idempotency_key(test_client, tmp_path):
+    """格式异常的幂等键应在执行工作流前返回 400。"""
+    excel_path = tmp_path / "audit_cases.xlsx"
+    _create_sample_excel(excel_path)
+    with excel_path.open("rb") as file:
+        uploaded = test_client.post(
+            "/api/audit/upload",
+            files={
+                "file": (
+                    "audit_cases.xlsx",
+                    file,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        ).json()
+
+    case_id = uploaded["cases"][0]["case_id"]
+    response = test_client.post(
+        f"/api/audit/batches/{uploaded['batch_id']}/cases/{case_id}/retry",
+        headers={"Idempotency-Key": "bad key"},
+    )
+
+    assert response.status_code == 400
+    assert "Idempotency-Key" in response.json()["detail"]
 
 
 def test_retry_problem_case_keeps_current_review_task_in_sync(test_client, tmp_path):

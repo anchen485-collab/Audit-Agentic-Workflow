@@ -1,10 +1,16 @@
 import json
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
-from app.domain.errors import CaseRetryConflictError
+from app.domain.errors import (
+    CaseRetryConflictError,
+    CaseRetryIdempotencyError,
+    CaseRetryInProgressError,
+    CaseRetryNotFoundError,
+)
 from app.infrastructure.database import connect_database, init_database
 
 
@@ -27,6 +33,24 @@ class AuditBatchRecord:
     total_duration_ms: float
     created_at: str
     result_dirty: bool = False
+
+
+@dataclass(frozen=True)
+class CaseRetryAttemptContext:
+    """开始重试后返回给服务层的稳定上下文。"""
+
+    attempt_id: str
+    batch_id: str
+    case_id: str
+    tenant_id: str
+    idempotency_key: str
+    retry_trace_id: str
+    retried_by: str
+    previous_action: str
+    case_payload: dict[str, Any]
+    previous_decision: dict[str, Any]
+    idempotent_replay: bool = False
+    cached_response: dict[str, Any] | None = None
 
 
 def save_batch_record(database_path: Path, record: AuditBatchRecord) -> None:
@@ -358,8 +382,162 @@ def list_agent_assessment_payloads(
     return _list_payloads(database_path, "agent_assessments", "batch_id = ?", (batch_id,))
 
 
+def begin_case_retry_attempt(
+    database_path: Path,
+    batch_id: str,
+    case_id: str,
+    tenant_id: str | None,
+    idempotency_key: str,
+    retried_by: str,
+    retry_trace_id: str,
+    lock_timeout_seconds: int,
+) -> CaseRetryAttemptContext:
+    """原子获取单条审批单的重试锁，并支持相同幂等键回放结果。"""
+    init_database(database_path)
+    started_at = new_created_at()
+
+    with connect_database(database_path) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        batch_sql = "SELECT tenant_id FROM audit_batches WHERE batch_id = ?"
+        batch_params: tuple[Any, ...] = (batch_id,)
+        if tenant_id:
+            batch_sql += " AND tenant_id = ?"
+            batch_params = (batch_id, tenant_id)
+        batch_row = connection.execute(batch_sql, batch_params).fetchone()
+        if batch_row is None:
+            raise CaseRetryNotFoundError("未找到指定审批批次。")
+
+        actual_tenant_id = str(batch_row["tenant_id"])
+        case_row = connection.execute(
+            """
+            SELECT payload_json FROM audit_cases
+            WHERE batch_id = ? AND case_id = ? AND tenant_id = ?
+            """,
+            (batch_id, case_id, actual_tenant_id),
+        ).fetchone()
+        decision_row = connection.execute(
+            """
+            SELECT payload_json FROM audit_decisions
+            WHERE batch_id = ? AND case_id = ? AND tenant_id = ?
+            """,
+            (batch_id, case_id, actual_tenant_id),
+        ).fetchone()
+        if case_row is None or decision_row is None:
+            raise CaseRetryNotFoundError("未找到指定批次中的审批单。")
+
+        case_payload = json.loads(case_row["payload_json"])
+        previous_decision = json.loads(decision_row["payload_json"])
+        completed_review = connection.execute(
+            """
+            SELECT 1 FROM review_tasks
+            WHERE batch_id = ? AND case_id = ? AND tenant_id = ? AND status = 'completed'
+            """,
+            (batch_id, case_id, actual_tenant_id),
+        ).fetchone()
+        if previous_decision.get("manual_final_action") or completed_review is not None:
+            raise CaseRetryConflictError("该审批单已有人工最终结论，重试不会覆盖人工审核结果。")
+
+        existing = connection.execute(
+            """
+            SELECT * FROM case_retry_attempts
+            WHERE tenant_id = ? AND batch_id = ? AND case_id = ? AND idempotency_key = ?
+            """,
+            (actual_tenant_id, batch_id, case_id, idempotency_key),
+        ).fetchone()
+        if existing is not None:
+            if existing["status"] == "succeeded":
+                cached_response = json.loads(existing["response_json"]) if existing["response_json"] else None
+                return CaseRetryAttemptContext(
+                    attempt_id=existing["attempt_id"],
+                    batch_id=batch_id,
+                    case_id=case_id,
+                    tenant_id=actual_tenant_id,
+                    idempotency_key=idempotency_key,
+                    retry_trace_id=existing["retry_trace_id"],
+                    retried_by=existing["retried_by"],
+                    previous_action=existing["old_action"],
+                    case_payload=case_payload,
+                    previous_decision=previous_decision,
+                    idempotent_replay=True,
+                    cached_response=cached_response,
+                )
+            if existing["status"] == "running":
+                if _is_retry_attempt_stale(existing["started_at"], lock_timeout_seconds):
+                    _mark_retry_attempt_timed_out(connection, existing, started_at)
+                    # 先持久化超时状态，再提示客户端换一个新键；否则异常退出会回滚本次更新。
+                    connection.commit()
+                    raise CaseRetryIdempotencyError("该幂等键对应的重试已超时，请使用新的幂等键再次提交。")
+                raise CaseRetryInProgressError("该审批单正在重试，请稍后查询重试结果。")
+            raise CaseRetryIdempotencyError("该幂等键对应的重试已失败，请使用新的幂等键再次提交。")
+
+        running_attempt = connection.execute(
+            """
+            SELECT attempt_id, started_at, payload_json FROM case_retry_attempts
+            WHERE tenant_id = ? AND batch_id = ? AND case_id = ? AND status = 'running'
+            """,
+            (actual_tenant_id, batch_id, case_id),
+        ).fetchone()
+        if running_attempt is not None:
+            if not _is_retry_attempt_stale(running_attempt["started_at"], lock_timeout_seconds):
+                raise CaseRetryInProgressError("该审批单已经有一个重试任务正在执行。")
+            _mark_retry_attempt_timed_out(connection, running_attempt, started_at)
+
+        attempt_id = f"retry_{uuid4().hex[:16]}"
+        attempt_payload = {
+            "attempt_id": attempt_id,
+            "batch_id": batch_id,
+            "case_id": case_id,
+            "tenant_id": actual_tenant_id,
+            "idempotency_key": idempotency_key,
+            "retry_trace_id": retry_trace_id,
+            "retried_by": retried_by,
+            "status": "running",
+            "old_action": previous_decision.get("action", ""),
+            "new_action": None,
+            "error_code": None,
+            "error_message": None,
+            "started_at": started_at,
+            "completed_at": None,
+        }
+        connection.execute(
+            """
+            INSERT INTO case_retry_attempts (
+                attempt_id, batch_id, case_id, tenant_id, idempotency_key,
+                retry_trace_id, retried_by, status, old_action, started_at, payload_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?, ?, ?)
+            """,
+            (
+                attempt_id,
+                batch_id,
+                case_id,
+                actual_tenant_id,
+                idempotency_key,
+                retry_trace_id,
+                retried_by,
+                attempt_payload["old_action"],
+                started_at,
+                _to_json(attempt_payload),
+            ),
+        )
+
+    return CaseRetryAttemptContext(
+        attempt_id=attempt_id,
+        batch_id=batch_id,
+        case_id=case_id,
+        tenant_id=actual_tenant_id,
+        idempotency_key=idempotency_key,
+        retry_trace_id=retry_trace_id,
+        retried_by=retried_by,
+        previous_action=attempt_payload["old_action"],
+        case_payload=case_payload,
+        previous_decision=previous_decision,
+    )
+
+
 def replace_case_after_retry(
     database_path: Path,
+    attempt_id: str,
     batch_id: str,
     case_id: str,
     tenant_id: str,
@@ -369,20 +547,21 @@ def replace_case_after_retry(
     review_task: dict[str, Any] | None,
     retry_trace_id: str,
     retried_by: str,
-) -> None:
-    """原子替换一条审批单的当前结果，并留下重试审计记录。"""
+) -> dict[str, float | int]:
+    """在同一事务内替换当前结果、更新指标并完成重试尝试。"""
     init_database(database_path)
 
     with connect_database(database_path) as connection:
-        case_row = connection.execute(
+        connection.execute("BEGIN IMMEDIATE")
+        attempt_row = connection.execute(
             """
-            SELECT 1 FROM audit_cases
-            WHERE batch_id = ? AND case_id = ? AND tenant_id = ?
+            SELECT payload_json FROM case_retry_attempts
+            WHERE attempt_id = ? AND batch_id = ? AND case_id = ? AND tenant_id = ? AND status = 'running'
             """,
-            (batch_id, case_id, tenant_id),
+            (attempt_id, batch_id, case_id, tenant_id),
         ).fetchone()
-        if case_row is None:
-            raise ValueError("未找到需要重试的审批单。")
+        if attempt_row is None:
+            raise CaseRetryConflictError("当前重试任务已失效，请刷新后重新提交。")
 
         old_decision_row = connection.execute(
             """
@@ -392,10 +571,9 @@ def replace_case_after_retry(
             (batch_id, case_id, tenant_id),
         ).fetchone()
         if old_decision_row is None:
-            raise ValueError("未找到审批单的原始结论。")
+            raise CaseRetryNotFoundError("未找到审批单的原始结论。")
 
         old_decision = json.loads(old_decision_row["payload_json"])
-        manual_final_action = old_decision.get("manual_final_action")
         completed_review = connection.execute(
             """
             SELECT 1 FROM review_tasks
@@ -403,14 +581,13 @@ def replace_case_after_retry(
             """,
             (batch_id, case_id, tenant_id),
         ).fetchone()
-        if manual_final_action or completed_review is not None:
+        if old_decision.get("manual_final_action") or completed_review is not None:
             raise CaseRetryConflictError("该审批单已有人工最终结论，重试不会覆盖人工审核结果。")
 
         decision_payload = {**decision, "tenant_id": tenant_id}
         connection.execute(
             """
-            UPDATE audit_decisions
-            SET payload_json = ?
+            UPDATE audit_decisions SET payload_json = ?
             WHERE batch_id = ? AND case_id = ? AND tenant_id = ?
             """,
             (_to_json(decision_payload), batch_id, case_id, tenant_id),
@@ -463,11 +640,7 @@ def replace_case_after_retry(
                 (batch_id, case_id, tenant_id),
             )
         else:
-            review_payload = {
-                **review_task,
-                "batch_id": batch_id,
-                "tenant_id": tenant_id,
-            }
+            review_payload = {**review_task, "batch_id": batch_id, "tenant_id": tenant_id}
             connection.execute(
                 """
                 INSERT OR REPLACE INTO review_tasks (
@@ -487,17 +660,39 @@ def replace_case_after_retry(
                 ),
             )
 
+        metrics = _calculate_persisted_decision_metrics(connection, batch_id, tenant_id)
+        connection.execute(
+            """
+            UPDATE audit_batches
+            SET decision_count = ?, review_task_count = ?, auto_handled_count = ?,
+                review_count = ?, auto_handled_rate = ?, review_rate = ?, result_dirty = 1
+            WHERE batch_id = ? AND tenant_id = ?
+            """,
+            (
+                metrics["decision_count"],
+                metrics["review_task_count"],
+                metrics["auto_handled_count"],
+                metrics["review_count"],
+                metrics["auto_handled_rate"],
+                metrics["review_rate"],
+                batch_id,
+                tenant_id,
+            ),
+        )
+
+        completed_at = new_created_at()
         retry_payload = {
             "batch_id": batch_id,
             "case_id": case_id,
             "tenant_id": tenant_id,
+            "attempt_id": attempt_id,
             "retry_trace_id": retry_trace_id,
             "retried_by": retried_by,
             "old_action": old_decision.get("action", ""),
             "new_action": decision.get("action", ""),
             "old_reason": old_decision.get("reason", ""),
             "new_reason": decision.get("reason", ""),
-            "retried_at": new_created_at(),
+            "retried_at": completed_at,
         }
         connection.execute(
             """
@@ -515,49 +710,104 @@ def replace_case_after_retry(
                 retried_by,
                 retry_payload["old_action"],
                 retry_payload["new_action"],
-                retry_payload["retried_at"],
+                completed_at,
                 _to_json(retry_payload),
             ),
         )
+        attempt_payload = json.loads(attempt_row["payload_json"])
+        attempt_payload.update(
+            {
+                "status": "succeeded",
+                "new_action": decision.get("action", ""),
+                "completed_at": completed_at,
+            }
+        )
         connection.execute(
-            "UPDATE audit_batches SET result_dirty = 1 WHERE batch_id = ? AND tenant_id = ?",
-            (batch_id, tenant_id),
+            """
+            UPDATE case_retry_attempts
+            SET status = 'succeeded', new_action = ?, completed_at = ?, payload_json = ?
+            WHERE attempt_id = ? AND status = 'running'
+            """,
+            (decision.get("action", ""), completed_at, _to_json(attempt_payload), attempt_id),
+        )
+
+    return metrics
+
+
+def fail_case_retry_attempt(
+    database_path: Path,
+    attempt_id: str,
+    error_code: str,
+    error_message: str,
+) -> None:
+    """记录失败尝试并释放单条审批单的运行锁。"""
+    init_database(database_path)
+    completed_at = new_created_at()
+    safe_message = error_message[:1000]
+    with connect_database(database_path) as connection:
+        row = connection.execute(
+            "SELECT payload_json FROM case_retry_attempts WHERE attempt_id = ? AND status = 'running'",
+            (attempt_id,),
+        ).fetchone()
+        if row is None:
+            return
+        payload = json.loads(row["payload_json"])
+        payload.update(
+            {
+                "status": "failed",
+                "error_code": error_code,
+                "error_message": safe_message,
+                "completed_at": completed_at,
+            }
+        )
+        connection.execute(
+            """
+            UPDATE case_retry_attempts
+            SET status = 'failed', error_code = ?, error_message = ?, completed_at = ?, payload_json = ?
+            WHERE attempt_id = ? AND status = 'running'
+            """,
+            (error_code, safe_message, completed_at, _to_json(payload), attempt_id),
         )
         connection.commit()
 
 
-def update_batch_decision_metrics(
-    database_path: Path,
-    batch_id: str,
-    tenant_id: str,
-    metrics: dict[str, float | int],
-) -> None:
-    """重试后仅刷新会随审批动作变化的批次汇总指标。"""
+def cache_case_retry_response(database_path: Path, attempt_id: str, response: dict[str, Any]) -> None:
+    """缓存成功响应，使客户端重复提交相同幂等键时直接回放。"""
     init_database(database_path)
     with connect_database(database_path) as connection:
         connection.execute(
             """
-            UPDATE audit_batches
-            SET decision_count = ?,
-                review_task_count = ?,
-                auto_handled_count = ?,
-                review_count = ?,
-                auto_handled_rate = ?,
-                review_rate = ?
-            WHERE batch_id = ? AND tenant_id = ?
+            UPDATE case_retry_attempts SET response_json = ?
+            WHERE attempt_id = ? AND status = 'succeeded'
             """,
-            (
-                int(metrics.get("decision_count", 0)),
-                int(metrics.get("review_task_count", 0)),
-                int(metrics.get("auto_handled_count", 0)),
-                int(metrics.get("review_count", 0)),
-                float(metrics.get("auto_handled_rate", 0.0)),
-                float(metrics.get("review_rate", 0.0)),
-                batch_id,
-                tenant_id,
-            ),
+            (_to_json(response), attempt_id),
         )
         connection.commit()
+
+
+def list_case_retry_attempt_payloads(
+    database_path: Path,
+    batch_id: str,
+    case_id: str,
+    tenant_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """按时间倒序查询一条审批单的重试尝试，包括成功和失败记录。"""
+    init_database(database_path)
+    where_clause = "batch_id = ? AND case_id = ?"
+    params: tuple[Any, ...] = (batch_id, case_id)
+    if tenant_id:
+        where_clause += " AND tenant_id = ?"
+        params = (batch_id, case_id, tenant_id)
+    with connect_database(database_path) as connection:
+        rows = connection.execute(
+            f"""
+            SELECT payload_json FROM case_retry_attempts
+            WHERE {where_clause}
+            ORDER BY started_at DESC, rowid DESC
+            """,
+            params,
+        ).fetchall()
+    return [json.loads(row["payload_json"]) for row in rows]
 
 
 def list_case_retry_log_payloads(
@@ -768,6 +1018,90 @@ def list_review_audit_log_payloads(
         return _list_payloads(database_path, "review_audit_logs", "case_id = ?", (case_id,))
 
     return _list_payloads(database_path, "review_audit_logs", "1 = 1", ())
+
+
+def _calculate_persisted_decision_metrics(
+    connection,
+    batch_id: str,
+    tenant_id: str,
+) -> dict[str, float | int]:
+    """在当前事务内从最新结论重算批次指标，避免结果和摘要短暂不一致。"""
+    decision_rows = connection.execute(
+        "SELECT payload_json FROM audit_decisions WHERE batch_id = ? AND tenant_id = ?",
+        (batch_id, tenant_id),
+    ).fetchall()
+    decisions = [json.loads(row["payload_json"]) for row in decision_rows]
+    review_task_count = connection.execute(
+        "SELECT COUNT(*) AS count FROM review_tasks WHERE batch_id = ? AND tenant_id = ?",
+        (batch_id, tenant_id),
+    ).fetchone()["count"]
+    total_count = len(decisions)
+    review_count = sum(1 for decision in decisions if decision.get("needs_review"))
+    auto_handled_count = total_count - review_count
+
+    action_counts = {
+        action: sum(1 for decision in decisions if decision.get("action") == action)
+        for action in {
+            "approved",
+            "rejected",
+            "needs_more_evidence",
+            "needs_human_review",
+        }
+    }
+
+    def rate(count: int) -> float:
+        return count / total_count if total_count else 0.0
+
+    return {
+        "total_count": total_count,
+        "decision_count": total_count,
+        "review_task_count": int(review_task_count),
+        "review_count": review_count,
+        "auto_handled_count": auto_handled_count,
+        "review_rate": rate(review_count),
+        "auto_handled_rate": rate(auto_handled_count),
+        "auto_approval_count": action_counts["approved"],
+        "auto_approval_rate": rate(action_counts["approved"]),
+        "auto_rejection_count": action_counts["rejected"],
+        "auto_rejection_rate": rate(action_counts["rejected"]),
+        "human_review_count": action_counts["needs_human_review"],
+        "human_review_rate": rate(action_counts["needs_human_review"]),
+        "insufficient_evidence_count": action_counts["needs_more_evidence"],
+        "insufficient_evidence_rate": rate(action_counts["needs_more_evidence"]),
+    }
+
+
+def _is_retry_attempt_stale(started_at: str, timeout_seconds: int) -> bool:
+    """判断运行中的重试是否已超过锁租约时间。"""
+    try:
+        started = datetime.fromisoformat(started_at)
+    except (TypeError, ValueError):
+        return True
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=UTC)
+    return datetime.now(UTC) - started >= timedelta(seconds=timeout_seconds)
+
+
+def _mark_retry_attempt_timed_out(connection, attempt_row, completed_at: str) -> None:
+    """把失去心跳的运行记录改为失败，从而释放数据库唯一锁。"""
+    error_message = "重试执行超时，锁已自动释放。"
+    payload = json.loads(attempt_row["payload_json"])
+    payload.update(
+        {
+            "status": "failed",
+            "error_code": "retry_lock_timeout",
+            "error_message": error_message,
+            "completed_at": completed_at,
+        }
+    )
+    connection.execute(
+        """
+        UPDATE case_retry_attempts
+        SET status = 'failed', error_code = ?, error_message = ?, completed_at = ?, payload_json = ?
+        WHERE attempt_id = ? AND status = 'running'
+        """,
+        ("retry_lock_timeout", error_message, completed_at, _to_json(payload), attempt_row["attempt_id"]),
+    )
 
 
 def new_created_at() -> str:

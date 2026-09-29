@@ -1,10 +1,16 @@
+import pytest
+
+from app.domain.errors import CaseRetryIdempotencyError, CaseRetryInProgressError
 from app.infrastructure.batch_repository import (
     AuditBatchRecord,
+    begin_case_retry_attempt,
     complete_review_task,
+    fail_case_retry_attempt,
     get_batch_record,
     list_agent_assessment_payloads,
     list_batch_records,
     list_case_payloads,
+    list_case_retry_attempt_payloads,
     list_decision_payloads,
     list_evidence_package_payloads,
     list_review_audit_log_payloads,
@@ -184,6 +190,179 @@ def test_review_task_queries_and_submit_can_filter_by_tenant(tmp_path):
 
     assert [task["task_id"] for task in tenant_tasks] == ["review_case_a"]
     assert forbidden_task is None
+
+
+def test_case_retry_lock_blocks_concurrent_attempt_and_releases_after_failure(tmp_path):
+    """同一审批单同一时间只允许一个重试，失败后应释放运行锁。"""
+    database_path = tmp_path / "audit_agent.db"
+    save_batch_record(database_path, _build_record("batch_retry", tenant_id="tenant_a"))
+    save_batch_details(
+        database_path=database_path,
+        batch_id="batch_retry",
+        tenant_id="tenant_a",
+        cases=[{"case_id": "case_retry", "status": "pending"}],
+        decisions=[{"case_id": "case_retry", "action": "needs_more_evidence"}],
+        review_tasks=[],
+        assessments={},
+    )
+
+    first = begin_case_retry_attempt(
+        database_path=database_path,
+        batch_id="batch_retry",
+        case_id="case_retry",
+        tenant_id="tenant_a",
+        idempotency_key="retry-key-0001",
+        retried_by="user_a",
+        retry_trace_id="trace_retry_1",
+        lock_timeout_seconds=300,
+    )
+
+    with pytest.raises(CaseRetryInProgressError):
+        begin_case_retry_attempt(
+            database_path=database_path,
+            batch_id="batch_retry",
+            case_id="case_retry",
+            tenant_id="tenant_a",
+            idempotency_key="retry-key-0002",
+            retried_by="user_b",
+            retry_trace_id="trace_retry_2",
+            lock_timeout_seconds=300,
+        )
+
+    fail_case_retry_attempt(database_path, first.attempt_id, "test_failure", "模拟失败")
+    second = begin_case_retry_attempt(
+        database_path=database_path,
+        batch_id="batch_retry",
+        case_id="case_retry",
+        tenant_id="tenant_a",
+        idempotency_key="retry-key-0002",
+        retried_by="user_b",
+        retry_trace_id="trace_retry_2",
+        lock_timeout_seconds=300,
+    )
+
+    assert second.attempt_id != first.attempt_id
+    attempts = list_case_retry_attempt_payloads(database_path, "batch_retry", "case_retry", "tenant_a")
+    assert [attempt["status"] for attempt in attempts] == ["running", "failed"]
+    fail_case_retry_attempt(database_path, second.attempt_id, "test_cleanup", "测试结束")
+
+
+def test_case_retry_stale_lock_is_failed_before_new_attempt_starts(tmp_path):
+    """进程异常退出留下的过期运行锁，应自动标记失败并允许新重试接管。"""
+    database_path = tmp_path / "audit_agent.db"
+    save_batch_record(database_path, _build_record("batch_retry", tenant_id="tenant_a"))
+    save_batch_details(
+        database_path=database_path,
+        batch_id="batch_retry",
+        tenant_id="tenant_a",
+        cases=[{"case_id": "case_retry", "status": "pending"}],
+        decisions=[{"case_id": "case_retry", "action": "needs_more_evidence"}],
+        review_tasks=[],
+        assessments={},
+    )
+    stale = begin_case_retry_attempt(
+        database_path=database_path,
+        batch_id="batch_retry",
+        case_id="case_retry",
+        tenant_id="tenant_a",
+        idempotency_key="retry-key-stale-0001",
+        retried_by="user_a",
+        retry_trace_id="trace_stale",
+        lock_timeout_seconds=300,
+    )
+
+    current = begin_case_retry_attempt(
+        database_path=database_path,
+        batch_id="batch_retry",
+        case_id="case_retry",
+        tenant_id="tenant_a",
+        idempotency_key="retry-key-current-0002",
+        retried_by="user_b",
+        retry_trace_id="trace_current",
+        lock_timeout_seconds=0,
+    )
+
+    attempts = list_case_retry_attempt_payloads(database_path, "batch_retry", "case_retry", "tenant_a")
+    attempts_by_id = {attempt["attempt_id"]: attempt for attempt in attempts}
+    assert current.attempt_id != stale.attempt_id
+    assert attempts_by_id[current.attempt_id]["status"] == "running"
+    assert attempts_by_id[stale.attempt_id]["status"] == "failed"
+    assert attempts_by_id[stale.attempt_id]["error_code"] == "retry_lock_timeout"
+    fail_case_retry_attempt(database_path, current.attempt_id, "test_cleanup", "测试结束")
+
+
+def test_same_idempotency_key_reports_conflict_after_its_lock_expires(tmp_path):
+    """原请求超时后，相同幂等键应得到明确冲突，并且过期锁必须已经释放。"""
+    database_path = tmp_path / "audit_agent.db"
+    save_batch_record(database_path, _build_record("batch_retry", tenant_id="tenant_a"))
+    save_batch_details(
+        database_path=database_path,
+        batch_id="batch_retry",
+        tenant_id="tenant_a",
+        cases=[{"case_id": "case_retry", "status": "pending"}],
+        decisions=[{"case_id": "case_retry", "action": "needs_more_evidence"}],
+        review_tasks=[],
+        assessments={},
+    )
+    stale = begin_case_retry_attempt(
+        database_path=database_path,
+        batch_id="batch_retry",
+        case_id="case_retry",
+        tenant_id="tenant_a",
+        idempotency_key="retry-key-same-0001",
+        retried_by="user_a",
+        retry_trace_id="trace_stale",
+        lock_timeout_seconds=300,
+    )
+
+    with pytest.raises(CaseRetryIdempotencyError):
+        begin_case_retry_attempt(
+            database_path=database_path,
+            batch_id="batch_retry",
+            case_id="case_retry",
+            tenant_id="tenant_a",
+            idempotency_key="retry-key-same-0001",
+            retried_by="user_a",
+            retry_trace_id="trace_new",
+            lock_timeout_seconds=0,
+        )
+
+    attempts = list_case_retry_attempt_payloads(database_path, "batch_retry", "case_retry", "tenant_a")
+    assert attempts[0]["attempt_id"] == stale.attempt_id
+    assert attempts[0]["status"] == "failed"
+    assert attempts[0]["error_code"] == "retry_lock_timeout"
+
+
+def test_case_retry_attempt_history_is_isolated_by_tenant(tmp_path):
+    """重试历史查询必须遵守租户边界，避免看到其他租户的执行记录。"""
+    database_path = tmp_path / "audit_agent.db"
+    save_batch_record(database_path, _build_record("batch_a", tenant_id="tenant_a"))
+    save_batch_details(
+        database_path=database_path,
+        batch_id="batch_a",
+        tenant_id="tenant_a",
+        cases=[{"case_id": "case_a", "status": "pending"}],
+        decisions=[{"case_id": "case_a", "action": "needs_more_evidence"}],
+        review_tasks=[],
+        assessments={},
+    )
+    attempt = begin_case_retry_attempt(
+        database_path=database_path,
+        batch_id="batch_a",
+        case_id="case_a",
+        tenant_id="tenant_a",
+        idempotency_key="retry-key-tenant-0001",
+        retried_by="user_a",
+        retry_trace_id="trace_tenant",
+        lock_timeout_seconds=300,
+    )
+
+    visible = list_case_retry_attempt_payloads(database_path, "batch_a", "case_a", "tenant_a")
+    hidden = list_case_retry_attempt_payloads(database_path, "batch_a", "case_a", "tenant_b")
+
+    assert [item["attempt_id"] for item in visible] == [attempt.attempt_id]
+    assert hidden == []
+    fail_case_retry_attempt(database_path, attempt.attempt_id, "test_cleanup", "测试结束")
 
 
 def _build_record(batch_id: str, tenant_id: str = "default") -> AuditBatchRecord:

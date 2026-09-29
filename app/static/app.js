@@ -176,27 +176,48 @@ async function retryAuditCase(caseId, button) {
     }
 
     button.disabled = true;
+    const idempotencyKey = button.dataset.retryIdempotencyKey || createRetryIdempotencyKey();
+    button.dataset.retryIdempotencyKey = idempotencyKey;
     setStatus(`正在重新审批 ${caseId}`, false);
     try {
         const response = await fetch(`/api/audit/batches/${encodeURIComponent(latestBatchId)}/cases/${encodeURIComponent(caseId)}/retry`, {
             method: "POST",
-            headers: buildAuthHeaders(),
+            headers: {
+                ...buildAuthHeaders(),
+                "Idempotency-Key": idempotencyKey,
+            },
         });
         if (!response.ok) {
-            throw new Error(await readErrorMessage(response));
+            const requestError = new Error(await readErrorMessage(response));
+            requestError.status = response.status;
+            requestError.retrySameKey = response.status >= 500 || response.headers.has("Retry-After");
+            throw requestError;
         }
 
         const data = await response.json();
+        delete button.dataset.retryIdempotencyKey;
         latestRows = latestRows.map((row) => row.case_id === caseId ? { ...row, ...data.decision } : row);
         renderMetrics(data.metrics || {});
         renderDecisionRows(latestRows);
         renderReviewRows(data.review_tasks || []);
-        setStatus(`审批单 ${caseId} 已重新审批`, false);
+        const resultText = data.idempotent_replay ? "已返回此前完成的重试结果" : "已重新审批";
+        setStatus(`审批单 ${caseId} ${resultText}`, false);
     } catch (error) {
+        if (error.status && !error.retrySameKey) {
+            delete button.dataset.retryIdempotencyKey;
+        }
         setStatus(error.message, true);
     } finally {
         button.disabled = false;
     }
+}
+
+function createRetryIdempotencyKey() {
+    if (window.crypto?.randomUUID) {
+        return `case-retry:${window.crypto.randomUUID()}`;
+    }
+
+    return `case-retry:${Date.now()}:${Math.random().toString(16).slice(2)}`;
 }
 
 function renderReviewRows(tasks) {

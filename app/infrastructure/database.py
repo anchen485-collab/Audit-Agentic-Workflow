@@ -157,6 +157,42 @@ def init_database(database_path: Path) -> None:
             )
             """
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS case_retry_attempts (
+                attempt_id TEXT PRIMARY KEY,
+                batch_id TEXT NOT NULL,
+                case_id TEXT NOT NULL,
+                tenant_id TEXT NOT NULL DEFAULT 'default',
+                idempotency_key TEXT NOT NULL,
+                retry_trace_id TEXT NOT NULL,
+                retried_by TEXT NOT NULL,
+                status TEXT NOT NULL,
+                old_action TEXT NOT NULL,
+                new_action TEXT,
+                error_code TEXT,
+                error_message TEXT,
+                started_at TEXT NOT NULL,
+                completed_at TEXT,
+                response_json TEXT,
+                payload_json TEXT NOT NULL,
+                UNIQUE (tenant_id, batch_id, case_id, idempotency_key)
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS ux_case_retry_attempt_running
+            ON case_retry_attempts (tenant_id, batch_id, case_id)
+            WHERE status = 'running'
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS ix_case_retry_attempt_lookup
+            ON case_retry_attempts (tenant_id, batch_id, case_id, started_at DESC)
+            """
+        )
         connection.commit()
 
 

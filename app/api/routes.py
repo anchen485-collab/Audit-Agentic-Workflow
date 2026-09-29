@@ -1,7 +1,8 @@
 from pathlib import Path
 from typing import Annotated
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
 from starlette.responses import FileResponse
 
 from app.agents.evidence_agent import EvidenceProvider
@@ -22,9 +23,19 @@ from app.api.schemas import (
     ReviewDecisionRequest,
     ReviewTaskListResponse,
 )
-from app.domain.errors import CaseRetryConflictError, CaseRetryNotFoundError
+from app.domain.errors import (
+    CaseRetryConflictError,
+    CaseRetryIdempotencyError,
+    CaseRetryInProgressError,
+    CaseRetryNotFoundError,
+)
 from app.domain.models import CurrentUser
-from app.infrastructure.batch_repository import AuditBatchRecord, record_file_access_audit_log
+from app.infrastructure.batch_repository import (
+    AuditBatchRecord,
+    get_case_payload,
+    list_case_retry_attempt_payloads,
+    record_file_access_audit_log,
+)
 from app.infrastructure.excel_reader import read_audit_excel
 from app.infrastructure.rule_repository import load_category_rules
 from app.infrastructure.settings import Settings
@@ -352,14 +363,16 @@ def retry_audit_case_api(
     evidence_provider: Annotated[EvidenceProvider, Depends(get_evidence_provider)],
     classification_provider: Annotated[ClassificationProvider, Depends(get_classification_provider)],
     current_user: Annotated[CurrentUser, Depends(require_any_role({"uploader", "reviewer", "auditor"}))],
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> CaseRetryResponse:
-    """重新执行单条审批单；已提交人工最终结论的记录保持不变。"""
+    """幂等地重新执行单条审批单；已提交人工最终结论的记录保持不变。"""
     try:
         result = retry_audit_case(
             batch_id=batch_id,
             case_id=case_id,
-            tenant_id=current_user.tenant_id,
+            tenant_id=_tenant_filter_for(current_user),
             retried_by=current_user.user_id,
+            idempotency_key=idempotency_key or f"auto_{uuid4().hex}",
             rules=load_category_rules(rule_file),
             evidence_provider=evidence_provider,
             classification_provider=classification_provider,
@@ -377,8 +390,38 @@ def retry_audit_case_api(
         raise HTTPException(status_code=404, detail=error.message) from error
     except CaseRetryConflictError as error:
         raise HTTPException(status_code=409, detail=error.message) from error
+    except CaseRetryInProgressError as error:
+        raise HTTPException(status_code=409, detail=error.message, headers={"Retry-After": "2"}) from error
+    except CaseRetryIdempotencyError as error:
+        raise HTTPException(status_code=409, detail=error.message) from error
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+    except Exception as error:
+        logger.exception("审批单重试失败: batch_id=%s case_id=%s", batch_id, case_id)
+        raise HTTPException(status_code=500, detail="审批单重试失败，请稍后使用相同的幂等键查询结果。") from error
+
+
+@router.get("/batches/{batch_id}/cases/{case_id}/retry-attempts")
+def list_case_retry_attempts_api(
+    batch_id: str,
+    case_id: str,
+    settings: Annotated[Settings, Depends(get_app_settings)],
+    current_user: Annotated[CurrentUser, Depends(require_any_role({"uploader", "reviewer", "auditor"}))],
+) -> dict:
+    """查询单条审批单的重试历史，便于定位重复提交、失败和耗时问题。"""
+    tenant_id = _tenant_filter_for(current_user)
+    if find_audit_batch(batch_id=batch_id, settings=settings, tenant_id=tenant_id) is None:
+        raise HTTPException(status_code=404, detail=f"未找到审批批次：{batch_id}")
+    if get_case_payload(settings.database_path, batch_id, case_id, tenant_id) is None:
+        raise HTTPException(status_code=404, detail=f"未找到审批单：{case_id}")
+
+    items = list_case_retry_attempt_payloads(
+        database_path=settings.database_path,
+        batch_id=batch_id,
+        case_id=case_id,
+        tenant_id=tenant_id,
+    )
+    return {"total": len(items), "items": items}
 
 
 @review_router.get("/tasks", response_model=ReviewTaskListResponse)

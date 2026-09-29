@@ -73,6 +73,20 @@ class CaseRetryConflictError(AuditError):
         super().__init__(message, "case_retry_conflict")
 
 
+class CaseRetryInProgressError(AuditError):
+    """同一审批单已经有一个重试正在执行。"""
+
+    def __init__(self, message: str):
+        super().__init__(message, "case_retry_in_progress")
+
+
+class CaseRetryIdempotencyError(AuditError):
+    """同一个幂等键对应的重试状态不允许再次执行。"""
+
+    def __init__(self, message: str):
+        super().__init__(message, "case_retry_idempotency_conflict")
+
+
 def action_for_error(error: AuditError) -> DecisionAction:
     """把业务错误映射为审批动作，避免异常直接打断整批流程。"""
     if isinstance(error, EvidenceUnavailableError):

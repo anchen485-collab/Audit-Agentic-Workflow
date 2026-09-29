@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     classification_concurrency: int = Field(default=3, ge=1, le=10, alias="CLASSIFICATION_CONCURRENCY")
     rule_concurrency: int = Field(default=8, ge=1, le=20, alias="RULE_CONCURRENCY")
     lightweight_agent_concurrency: int = Field(default=8, ge=1, le=20, alias="LIGHTWEIGHT_AGENT_CONCURRENCY")
+    case_retry_lock_timeout_seconds: int = Field(
+        default=300,
+        ge=30,
+        le=3600,
+        alias="CASE_RETRY_LOCK_TIMEOUT_SECONDS",
+    )
     rule_recall_default_top_k: int = Field(default=5, ge=1, le=12, alias="RULE_RECALL_DEFAULT_TOP_K")
     rule_recall_max_top_k: int = Field(default=8, ge=1, le=12, alias="RULE_RECALL_MAX_TOP_K")
     rule_recall_exact_match_score_threshold: int = Field(
