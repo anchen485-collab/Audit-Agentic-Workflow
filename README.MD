@@ -1,4 +1,4 @@
-# 基于langgraph的审批工作流
+# 基于LangGraph的审批工作流
 
 [![CI](https://github.com/anchen485-collab/new-audit-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/anchen485-collab/new-audit-agent/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](https://www.python.org/)
@@ -203,10 +203,6 @@ LLM：理解企业业务与分类语义
 ### 为什么是固定 Workflow，而不是自由规划的 Agent？
 
 企业分类审批的主链路高度稳定，适合用显式 Workflow 约束；真正不确定的部分只有“企业业务是否支持该分类”，才交给 LLM。这样的 Agentic Workflow 更容易测试、回放和优化。
-
-## 可用于面试的项目总结
-
-> 我基于实习中接触的企业分类录入审批业务，独立复刻了一个可落地的审批 Agent。系统通过 LangGraph 将 Excel 解析、官网证据采集、规则召回、LLM 语义判断、风险分层和人工复核编排成固定工作流；其中 LLM 只负责语义判断，最终审批由确定性规则和 Decision Verifier 双重把关。为处理真实业务中的失败重试问题，我还实现了单条审批的幂等重试、互斥锁、超时恢复与审计追踪，使每条记录都能复盘“依据了什么证据、命中了什么规则、为什么得到这个结论”。
 
 ## 后续迭代方向
 
