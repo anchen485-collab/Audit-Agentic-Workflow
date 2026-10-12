@@ -216,6 +216,7 @@ def verify_decisions_node(state: AuditWorkflowState) -> dict[str, Any]:
                 evidence=state["evidence_packages"][audit_case.case_id],
                 candidate_rules=state["rule_sets"][audit_case.case_id],
                 classification_result=state["classification_results"][audit_case.case_id],
+                risk_assessment=state["risk_assessments"][audit_case.case_id],
                 decision=decisions_by_case_id[audit_case.case_id],
             )
 

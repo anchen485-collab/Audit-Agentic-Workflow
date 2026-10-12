@@ -199,6 +199,12 @@ def test_decision_verifier_keeps_valid_auto_approval():
         evidence=_build_evidence(),
         candidate_rules=_build_rules(),
         classification_result=_classification_result("supports_entered_category"),
+        risk_assessment=RiskAssessment(
+            case_id="case_001",
+            risk_level=RiskLevel.LOW,
+            risk_score=20,
+            reasons=[],
+        ),
         decision=decision,
     )
 
@@ -224,6 +230,12 @@ def test_decision_verifier_downgrades_invalid_auto_approval_to_human_review():
         evidence=_build_evidence(),
         candidate_rules=_build_rules(),
         classification_result=_classification_result("conflicts_with_entered_category"),
+        risk_assessment=RiskAssessment(
+            case_id="case_001",
+            risk_level=RiskLevel.LOW,
+            risk_score=20,
+            reasons=[],
+        ),
         decision=decision,
     )
 
