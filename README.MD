@@ -1,4 +1,4 @@
-# 企业录入审批 Agent
+# 基于langgraph的审批工作流
 
 [![CI](https://github.com/anchen485-collab/new-audit-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/anchen485-collab/new-audit-agent/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](https://www.python.org/)
